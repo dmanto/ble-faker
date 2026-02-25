@@ -1,0 +1,7 @@
+{
+  "plugins": ["typescript", "eslint"],
+  "rules": {
+    "typescript/no-explicit-any": "warn",
+    "no-console": "off"
+  }
+}

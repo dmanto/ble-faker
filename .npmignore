@@ -1,0 +1,15 @@
+src/
+test/
+docs/
+.github/
+.qodo/
+node_modules/
+*.tgz
+tsconfig.json
+vite.config.js
+pnpm-lock.yaml
+pnpm-workspace.yaml
+.oxlintrc.json
+config.json
+release-please-config.json
+.release-please-manifest.json

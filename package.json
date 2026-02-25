@@ -1,0 +1,44 @@
+{
+  "name": "ble-faker",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Scriptable BLE simulation toolchain for React Native development",
+  "main": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dmanto/ble-faker.git"
+  },
+  "author": {
+    "name": "Daniel Mantovani",
+    "email": "dmanto@cpan.org"
+  },
+  "scripts": {
+    "dev": "concurrently -n \"NODE,TSC\" -c \"green,blue\" \"pnpm dev:node\" \"pnpm dev:tsc\"",
+    "dev:node": "node --watch src/index.ts server",
+    "dev:tsc": "pnpm tsc --watch --noEmit --project tsconfig.json",
+    "build": "vite build",
+    "start": "node dist/index.js server",
+    "lint": "oxlint",
+    "format": "prettier --write .",
+    "test": "node --test test/**/*.test.ts",
+    "build:test": "pnpm build && pnpm test",
+    "check": "concurrently \"pnpm lint\" \"pnpm test\" \"tsc\""
+  },
+  "dependencies": {
+    "@mojojs/core": "latest",
+    "react-native-ble-plx": "latest",
+    "chokidar": "latest",
+    "jsonpath-plus": "latest",
+    "lodash": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/lodash": "latest",
+    "@types/jsonpath-plus": "latest",
+    "concurrently": "latest",
+    "oxlint": "latest",
+    "prettier": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}
