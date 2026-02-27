@@ -17,18 +17,15 @@ async function start({
   dir = "./mocks",
   port = 3000,
 }: { dir?: string; port?: number } = {}): Promise<void> {
-  const [cmd, args] =
-    process.platform === "win32"
-      ? ([
-          "cmd",
-          ["/c", "npx", ".", "--dir", dir, "--port", String(port)],
-        ] as const)
-      : (["npx", [".", "--dir", dir, "--port", String(port)]] as const);
   const spawnOptions =
     process.platform === "win32"
-      ? { stdio: "ignore" as const }
+      ? { shell: true, stdio: "ignore" as const }
       : { stdio: "ignore" as const, detached: true };
-  child = spawn(cmd, [...args], spawnOptions);
+  child = spawn(
+    "npx",
+    [".", "--dir", dir, "--port", String(port)],
+    spawnOptions,
+  );
   child.unref();
 
   const url = `http://127.0.0.1:${port}`;
