@@ -35,4 +35,5 @@ while (i < args.length) {
 }
 
 app.config.mocksDir = dir;
+app.config.port = parseInt(port, 10);
 void app.cli.start("server", "-l", `http://*:${port}`, ...serverArgs);

@@ -1,5 +1,7 @@
 import mojo, { Logger, type MojoApp } from "@mojojs/core";
 import { registerPlugins } from "./plugins.js";
+import fs from "node:fs";
+import { STATE_FILE } from "./server-control.js";
 
 export const app: MojoApp = mojo();
 app.log.formatter = Logger.systemdFormatter;
@@ -14,4 +16,16 @@ app.get("/", async (ctx) => {
   await ctx.render({ json: { version: app.config.version, dir: app.config.mocksDir } });
 });
 
+app.onStart(async () => {
+  const port = (app.config.port as number | undefined) ?? 3000;
+  const url = `http://127.0.0.1:${port}`;
+  fs.writeFileSync(STATE_FILE, JSON.stringify({ pid: process.pid, url, port }));
+});
+
+app.onStop(async () => {
+  try { fs.unlinkSync(STATE_FILE); } catch {}
+});
+
 void app.start();
+
+export { bleMockServer } from "./server-control.js";
