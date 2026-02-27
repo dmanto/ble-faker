@@ -27,11 +27,11 @@ bridge-server-app/
 ├── mocks/
 │   ├── heart-rate-monitors/       # Category folder (example)
 │   │   ├── gatt-profile.json            # GATT structure (see below)
-│   │   ├── FF-00-11-22-33-02.json    # Instance 1: "Simulated Runner"
-│   │   └── AA-BB-CC-DD-EE-99.json    # Instance 2: "Tachycardia Test"
+│   │   ├── FF-00-11-22-33-02.js   # Instance 1: "Simulated Runner"
+│   │   └── AA-BB-CC-DD-EE-99.js   # Instance 2: "Tachycardia Test"
 │   └── battery/                   # Category folder (other example)
 │       ├── gatt-profile.json
-│       └── 01-23-45-67-89-AB.json    # Some battery
+│       └── 01-23-45-67-89-AB.js    # Some battery
 ├── src/
 │   ├── index.ts         # Mojo entry point & WebSocket routing
 │   ├── models/          # Mojo models
