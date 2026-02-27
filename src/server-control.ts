@@ -24,7 +24,12 @@ async function start({
           ["/c", "npx", ".", "--dir", dir, "--port", String(port)],
         ] as const)
       : (["npx", [".", "--dir", dir, "--port", String(port)]] as const);
-  child = spawn(cmd, [...args], { stdio: "pipe" });
+  const spawnOptions =
+    process.platform === "win32"
+      ? { stdio: "ignore" as const }
+      : { stdio: "ignore" as const, detached: true };
+  child = spawn(cmd, [...args], spawnOptions);
+  child.unref();
 
   const url = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + 10_000;
@@ -39,7 +44,16 @@ async function start({
 }
 
 function stop(): void {
-  child?.kill();
+  if (!child || child.pid === undefined) return;
+  if (process.platform === "win32") {
+    spawn("taskkill", ["/F", "/T", "/PID", String(child.pid)], {
+      stdio: "ignore",
+    });
+  } else {
+    try {
+      process.kill(-child.pid, "SIGTERM");
+    } catch {}
+  }
   child = null;
 }
 
