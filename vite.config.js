@@ -16,9 +16,7 @@ export default defineConfig({
       external: [...builtinModules, /^@mojojs/, /node:/],
       output: {
         banner: (chunk) =>
-          chunk.isEntry && chunk.name === "bin"
-            ? "#!/usr/bin/env node\n"
-            : "",
+          chunk.isEntry && chunk.name === "bin" ? "#!/usr/bin/env node\n" : "",
       },
     },
     outDir: "dist",

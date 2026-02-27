@@ -1,5 +1,9 @@
 # 🧬 BLE Live Mock Server
 
+[![CI](https://github.com/dmanto/ble-faker/actions/workflows/ci.yml/badge.svg)](https://github.com/dmanto/ble-faker/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/ble-faker)](https://www.npmjs.com/package/ble-faker)
+[![License: MIT](https://img.shields.io/npm/l/ble-faker)](https://github.com/dmanto/ble-faker/blob/main/LICENSE)
+
 A universal **Bluetooth Low Energy (BLE)** peripheral emulator powered by [mojo.js](https://mojojs.org/). This server allows mobile developers to simulate complex hardware behavior by simply editing JSON files in their IDE.
 
 Changes to your mock files are broadcasted in **real-time** via WebSockets to your React Native app, enabling a "Hot Reload" experience for hardware integration.
