@@ -1,9 +1,9 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-export const STATE_FILE = path.join(os.homedir(), '.ble-faker-server.json');
+export const STATE_FILE = path.join(os.homedir(), ".ble-faker-server.json");
 
 interface ServerState {
   pid: number;
@@ -13,11 +13,18 @@ interface ServerState {
 
 let child: ChildProcess | null = null;
 
-async function start({ dir = './mocks', port = 3000 }: { dir?: string; port?: number } = {}): Promise<void> {
-  const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  child = spawn(npx, ['.', '--dir', dir, '--port', String(port)], {
-    stdio: 'pipe',
-  });
+async function start({
+  dir = "./mocks",
+  port = 3000,
+}: { dir?: string; port?: number } = {}): Promise<void> {
+  const [cmd, args] =
+    process.platform === "win32"
+      ? ([
+          "cmd",
+          ["/c", "npx", ".", "--dir", dir, "--port", String(port)],
+        ] as const)
+      : (["npx", [".", "--dir", dir, "--port", String(port)]] as const);
+  child = spawn(cmd, [...args], { stdio: "pipe" });
 
   const url = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + 10_000;
@@ -26,9 +33,9 @@ async function start({ dir = './mocks', port = 3000 }: { dir?: string; port?: nu
       const res = await fetch(url);
       if (res.ok) return;
     } catch {}
-    await new Promise<void>(r => setTimeout(r, 200));
+    await new Promise<void>((r) => setTimeout(r, 200));
   }
-  throw new Error('ble-faker server did not start within 10s');
+  throw new Error("ble-faker server did not start within 10s");
 }
 
 function stop(): void {
@@ -37,7 +44,7 @@ function stop(): void {
 }
 
 async function get(): Promise<unknown> {
-  const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) as ServerState;
+  const state = JSON.parse(fs.readFileSync(STATE_FILE, "utf8")) as ServerState;
   const res = await fetch(state.url);
   return res.json();
 }

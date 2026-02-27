@@ -13,7 +13,9 @@ app.config.version = JSON.parse(
 ).version;
 
 app.get("/", async (ctx) => {
-  await ctx.render({ json: { version: app.config.version, dir: app.config.mocksDir } });
+  await ctx.render({
+    json: { version: app.config.version, dir: app.config.mocksDir },
+  });
 });
 
 app.onStart(async () => {
@@ -23,7 +25,9 @@ app.onStart(async () => {
 });
 
 app.onStop(async () => {
-  try { fs.unlinkSync(STATE_FILE); } catch {}
+  try {
+    fs.unlinkSync(STATE_FILE);
+  } catch {}
 });
 
 void app.start();
