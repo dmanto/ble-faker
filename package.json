@@ -18,7 +18,7 @@
     "dev:node": "node --watch src/index.ts server",
     "dev:tsc": "pnpm tsc --watch --noEmit --project tsconfig.json",
     "build": "vite build",
-    "postbuild": "chmod +x dist/bin.js",
+    "postbuild": "node -e \"if(process.platform!=='win32')require('fs').chmodSync('dist/bin.js',0o755)\"",
     "start": "node dist/index.js server",
     "lint": "oxlint",
     "format": "prettier --write .",
