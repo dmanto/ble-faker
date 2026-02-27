@@ -4,13 +4,22 @@ import { builtinModules } from "module";
 export default defineConfig({
   build: {
     lib: {
-      entry: "src/index.ts",
+      entry: {
+        index: "src/index.ts",
+        bin: "src/bin.ts",
+      },
       formats: ["es"],
-      fileName: "index",
+      fileName: (_format, entryName) => `${entryName}.js`,
     },
     rollupOptions: {
       // Don't bundle Node built-ins or Mojo core
       external: [...builtinModules, /^@mojojs/, /node:/],
+      output: {
+        banner: (chunk) =>
+          chunk.isEntry && chunk.name === "bin"
+            ? "#!/usr/bin/env node\n"
+            : "",
+      },
     },
     outDir: "dist",
     target: "node23",

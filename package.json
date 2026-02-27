@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Scriptable BLE simulation toolchain for React Native development",
   "main": "dist/index.js",
+  "bin": "dist/bin.js",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dmanto/ble-faker.git"
@@ -17,6 +18,7 @@
     "dev:node": "node --watch src/index.ts server",
     "dev:tsc": "pnpm tsc --watch --noEmit --project tsconfig.json",
     "build": "vite build",
+    "postbuild": "chmod +x dist/bin.js",
     "start": "node dist/index.js server",
     "lint": "oxlint",
     "format": "prettier --write .",
