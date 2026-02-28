@@ -33,7 +33,7 @@ On startup the server writes `~/.ble-faker-server.json` containing `{ pid, url, 
 
 A programmatic interface for use in tests and app-side mock code:
 
-- `start({ dir, port })` — spawns the server via `npx`, polls `GET /` until it responds (10s timeout).
+- `start({ dir, port })` — spawns the server by invoking `process.execPath` (the current Node binary) directly with `dist/bin.js`, then polls `GET /` until it responds (30s timeout). The bin path is resolved at runtime via `path.dirname(fileURLToPath(import.meta.url))` — **not** via `new URL("./bin.js", import.meta.url)`, which Vite would inline as a `data:` URL during the library build.
 - `stop()` — kills the server process. On Windows uses `taskkill /F /T` to terminate the full process tree; on Linux/macOS kills the process group via `process.kill(-pid)`.
 - `get()` — reads the state file to obtain the server URL, performs `GET /`, returns the parsed JSON body.
 
@@ -54,10 +54,11 @@ export default function (state, event) {
 
 `runDeviceLogic` executes this safely via `node:vm`:
 
-- **Isolation**: runs in a `vm.createContext` sandbox with no access to `process`, filesystem, or network.
+- **Isolation**: runs in a `vm.createContext` sandbox. `process` and `require` are explicitly shadowed as `undefined` in the sandbox object to prevent prototype-chain leakage from the Node.js host context.
 - **ESM compatibility**: strips `export default` before evaluation so `vm.Script` (CommonJS) can handle it.
-- **Timeout**: 50ms CPU limit prevents runaway logic.
+- **Timeout**: configurable CPU limit (default 50ms) prevents runaway logic.
 - **Available globals** (no imports needed): `Buffer`, `Uint8Array`, `DataView`, and a `utils` object with `toBase64`, `fromBase64`, `packUint16`.
+- **Result normalisation**: the return value is JSON round-tripped before leaving the helper, converting vm-context arrays/objects into host objects. This makes results safe to serialise and comparable with `deepEqual`.
 - **Console capture**: `console.log/warn/error` inside logic files are captured into a `logs` array rather than written to stdout. Returns `DeviceLogicOutput { result, logs }` — logs will be forwarded to the browser device view via WebSocket (planned).
 - **Event system**: the `event` argument is a typed discriminated union (`DeviceEvent`) covering all lifecycle and interaction events:
 
@@ -71,9 +72,21 @@ export default function (state, event) {
 | `notify`    | characteristic notification triggered (`uuid`) |
 | `input`     | browser POSTed an action (`id`, `payload`)     |
 
-### 6. CI
+### 6. Tests
 
-Three-platform matrix (ubuntu, macos, windows) via `.github/workflows/ci.yml`, running `pnpm build:test` on Node 23. Automatic release PR management via `release-please`.
+Three test files, run in parallel via `node --test test/**/*.test.ts`:
+
+| file | what it covers |
+|---|---|
+| `test/advertising-size.test.ts` | `calculateAdvertizingSize` helper (packet size arithmetic) |
+| `test/device-logic.test.ts` | `runDeviceLogic` sandbox — 14 tests covering core behaviour, utils, console capture, state isolation, error handling, and sandbox security |
+| `test/server.test.ts` | `bleMockServer` lifecycle — spawns a real server, verifies state file round-trip, stops it |
+
+`test/fixtures/heart-rate-monitors/gatt-profile.json` holds the first example device fixture (work in progress).
+
+### 7. CI
+
+Three-platform matrix (ubuntu, macos, windows) via `.github/workflows/ci.yml`, running `pnpm build:test` on Node 23. Automatic release PR management via `release-please`. Typical run times: Ubuntu fastest, macOS ~26s, Windows ~46s (Windows overhead is inherent — NTFS + Defender — not test execution time).
 
 ---
 
@@ -106,9 +119,9 @@ Once a device is discovered and connected, WebSocket routes will handle the ongo
 
 ### Mock Device Logic (file conventions)
 
-The sandbox engine is implemented (see §5). Still needed:
+The sandbox engine is implemented (see §5). The `test/fixtures/` directory contains the first example of the intended folder structure. Still needed:
 
-- `gatt-profile.json` file format and loader.
+- `gatt-profile.json` file format specification and loader.
 - `<id>.js` file watcher (chokidar, already a dependency) triggering `reload` events.
 - **State Engine**: JSONPath-based instructions to apply the `result` commands returned by `runDeviceLogic`.
 
