@@ -14,7 +14,7 @@ type DeviceEvent =
   | { kind: "reload" }
   | { kind: "advertise" }
   | { kind: "describe" }
-  | { kind: "notify"; uuid: string }
+  | { kind: "notify"; uuid: string; payload: string }
   | { kind: "input"; id: string; payload: string };
 
 export function registerPlugins(app: MojoApp): void {

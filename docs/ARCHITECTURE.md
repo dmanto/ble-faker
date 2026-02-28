@@ -53,13 +53,34 @@ Exported from `src/index.ts` so it is available as `import { bleMockServer } fro
 
 ### 5. Device Logic Sandbox (`runDeviceLogic`)
 
-Device `.js` files export a single default function:
+Device `.js` files export a single default function. A complete example showing all event kinds:
 
 ```js
-export default function (state, event) {
-  if (event.kind === "tick") {
-    return [["2A37", utils.packUint16(72)]];
+export default function(state, event) {
+
+  if (event.kind === 'start') {
+    return [
+      { in:  [{ name: 'target', label: 'Target HR' }] },
+      { out: [{ name: 'current', label: 'Current HR' }] },
+    ];
   }
+
+  if (event.kind === 'advertise') {
+    return [{ name: 'HR Monitor', rssi: -65, serviceUUIDs: ['180D'] }];
+  }
+
+  if (event.kind === 'tick') {
+    const hr = state.vars?.hr ?? 72;
+    return [
+      ['2A37', utils.packUint16(hr)],
+      { set: { current: String(hr) } },
+    ];
+  }
+
+  if (event.kind === 'input' && event.id === 'target') {
+    return [{ vars: { hr: parseInt(event.payload, 10) } }];
+  }
+
   return [];
 }
 ```
@@ -70,19 +91,42 @@ export default function (state, event) {
 - **ESM compatibility**: strips `export default` before evaluation so `vm.Script` (CommonJS) can handle it.
 - **Timeout**: configurable CPU limit (default 50ms) prevents runaway logic.
 - **Available globals** (no imports needed): `Buffer`, `Uint8Array`, `DataView`, and a `utils` object with `toBase64`, `fromBase64`, `packUint16`.
+- **`state`**: read-only input from the server. Contains two server-managed namespaces:
+  - `state.dev` — current accumulated `Partial<Device>` (advertising packet fields).
+  - `state.vars` — device-local values persisted from previous `{ vars: … }` return instructions (see below).
+  - Direct mutations to `state` inside the function are **silently discarded** — all writes must go through return instructions.
 - **Result normalisation**: the return value is JSON round-tripped before leaving the helper, converting vm-context arrays/objects into host objects. This makes results safe to serialise and comparable with `deepEqual`.
 - **Console capture**: `console.log/warn/error` inside logic files are captured into a `logs` array rather than written to stdout. Returns `DeviceLogicOutput { result, logs }` — logs will be forwarded to the browser device view via WebSocket (planned).
-- **Event system**: the `event` argument is a typed discriminated union (`DeviceEvent`) covering all lifecycle and interaction events:
 
-| kind        | description                                    |
-| ----------- | ---------------------------------------------- |
-| `start`     | server/device initialization                   |
-| `tick`      | periodic timer update                          |
-| `reload`    | mock file changed on disk                      |
-| `advertise` | server requests advertising packet data        |
-| `describe`  | server requests UI schema for browser view     |
-| `notify`    | characteristic notification triggered (`uuid`) |
-| `input`     | browser POSTed an action (`id`, `payload`)     |
+#### Event system
+
+The `event` argument is a typed discriminated union (`DeviceEvent`):
+
+| kind        | description                                                        |
+| ----------- | ------------------------------------------------------------------ |
+| `start`     | server/device initialization                                       |
+| `tick`      | periodic timer update                                              |
+| `reload`    | mock file changed on disk                                          |
+| `advertise` | server requests the current advertising packet                     |
+| `notify`    | characteristic notification triggered — `uuid` + `payload` (base64) |
+| `input`     | browser submitted a form field — `id` + `payload`                 |
+
+#### Return format — command dispatch
+
+Each item in the returned array is one of the following. The server discriminates by shape:
+
+| Item shape | Discriminant | Effect |
+| --- | --- | --- |
+| `['2A37', base64]` | `Array.isArray` | Updates a GATT characteristic value |
+| `{ name, rssi, … }` | plain object | Patches `state.dev` (advertising packet — any `Partial<Device>` field) |
+| `{ in: [{ name, label }] }` | `'in' in item` | Defines browser input controls: one label + text field + submit button per entry; submit POSTs → `input` event |
+| `{ out: [{ name, label }] }` | `'out' in item` | Defines browser output display fields: one label + empty field per entry, `id` taken from `name` |
+| `{ set: { fieldName: 'val' } }` | `'set' in item` | Pushes string values to named output fields in the browser via WebSocket |
+| `{ vars: { name: anyValue } }` | `'vars' in item` | Persists any-typed values into `state.vars` for the next call — the only way to write device-local state |
+
+`in`/`out` definitions are typically returned from `start` and `reload` events. The server applies all commands internally using JSON pointers — device code never constructs paths directly.
+
+> **Note:** `state` is read-only from the device code's perspective. Writing `state.hr = 42` inside the function will silently have no effect. Use `{ vars: { hr: 42 } }` instead.
 
 ### 6. Tests
 
