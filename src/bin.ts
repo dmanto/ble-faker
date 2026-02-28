@@ -1,4 +1,6 @@
 import { app } from "./index.js";
+import fs from "node:fs";
+import { STATE_FILE } from "./server-control.js";
 
 const usage = `Usage: ble-faker [OPTIONS]
 
@@ -33,6 +35,20 @@ while (i < args.length) {
   }
   i++;
 }
+
+// Clean up state file on crashes and Ctrl+C.
+// SIGTERM is already handled by mojo's onStop hook.
+// SIGKILL cannot be intercepted — the PID liveness check in server-control.ts covers that.
+function cleanup() {
+  try {
+    fs.unlinkSync(STATE_FILE);
+  } catch {}
+}
+process.on("exit", cleanup);
+process.on("SIGINT", () => {
+  cleanup();
+  process.exit(0);
+});
 
 app.config.mocksDir = dir;
 app.config.port = parseInt(port, 10);

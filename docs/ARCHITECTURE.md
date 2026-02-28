@@ -23,11 +23,23 @@ The server includes two mojo helpers registered in `src/plugins.ts`:
 
 ### 2. CLI Entry Point
 
-`src/bin.ts` parses `--dir`/`-d` and `--port`/`-p` flags and delegates to mojo's `server` command via `app.cli.start()` (bypassing mojo's `detectImport` guard, which breaks under symlinks such as `npx` and `pnpm link`).
+`src/bin.ts` is a thin CLI argument parser — it imports `app` from `index.ts` (which registers all hooks and routes as a side effect) then delegates to mojo's `server` command via `app.cli.start()`. This bypasses mojo's `detectImport` guard, which breaks under symlinks such as `npx` and `pnpm link`.
+
+`bin.ts` also registers process exit handlers to clean up the state file on unexpected termination:
+
+- **`process.on('exit', …)`** — fires synchronously on `process.exit()` and unhandled exceptions (crashes).
+- **`process.on('SIGINT', …)`** — fires on Ctrl+C.
+- **SIGTERM** is already handled by mojo's `onStop` hook (see §3).
+- **SIGKILL** cannot be intercepted by any process — the PID liveness check on next startup covers that case.
 
 ### 3. Server State File
 
-On startup the server writes `~/.ble-faker-server.json` containing `{ pid, url, port }` via mojo's `onStart` hook. The file is deleted on graceful shutdown via `onStop`. If the server crashes or is killed, the file remains stale and is detected on next startup via a PID liveness check (`process.kill(pid, 0)`).
+`src/index.ts` registers two mojo lifecycle hooks on the shared `app` object:
+
+- **`onStart`** — writes `~/.ble-faker-server.json` containing `{ pid, url, port }` once the server is ready.
+- **`onStop`** — deletes the state file on graceful SIGTERM shutdown.
+
+Together with the `bin.ts` exit handlers above, the state file is cleaned up for all termination scenarios except SIGKILL. Stale files from SIGKILL or hard crashes are detected on next startup via a PID liveness check (`process.kill(pid, 0)`).
 
 ### 4. `bleMockServer` Helper (`src/server-control.ts`)
 
