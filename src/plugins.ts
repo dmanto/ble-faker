@@ -1,5 +1,15 @@
 import type { MojoApp } from "@mojojs/core";
 import type { Device } from "react-native-ble-plx";
+import vm from "node:vm";
+
+type DeviceEvent =
+  | { kind: "start" }
+  | { kind: "tick" }
+  | { kind: "reload" }
+  | { kind: "advertise" }
+  | { kind: "describe" }
+  | { kind: "notify"; uuid: string }
+  | { kind: "input"; id: string; payload: string };
 
 export function registerPlugins(app: MojoApp): void {
   app.addHelper(
@@ -48,6 +58,57 @@ export function registerPlugins(app: MojoApp): void {
       }
 
       return size;
+    },
+  );
+  app.addHelper(
+    "runDeviceLogic",
+    (
+      ctx,
+      deviceCode: string,
+      currentState: Record<string, unknown>,
+      event: DeviceEvent,
+    ): unknown => {
+      const sandbox = {
+        // Standard binary tools available without imports
+        Buffer,
+        Uint8Array,
+        DataView,
+
+        // Convenience helpers
+        utils: {
+          toBase64: (arr: Uint8Array) => Buffer.from(arr).toString("base64"),
+          fromBase64: (str: string) => Buffer.from(str, "base64"),
+          packUint16: (val: number) => {
+            const b = Buffer.alloc(2);
+            b.writeUInt16LE(val);
+            return b.toString("base64");
+          },
+        },
+
+        // Deep-cloned so logic cannot mutate server state directly
+        state: JSON.parse(JSON.stringify(currentState)) as Record<string, unknown>,
+        event,
+        console,
+      };
+
+      const context = vm.createContext(sandbox);
+
+      try {
+        // Strip `export default` so vm.Script (CommonJS) can evaluate the function
+        const cjsCode = deviceCode.replace("export default", "__export =");
+        const wrapped = `let __export;\n${cjsCode}\n__export`;
+        const fn = vm.runInContext(wrapped, context, { timeout: 50 }) as (
+          state: Record<string, unknown>,
+          event: DeviceEvent,
+        ) => unknown;
+        return fn(sandbox.state, sandbox.event);
+      } catch (err) {
+        console.error(
+          "Device logic error:",
+          err instanceof Error ? err.message : String(err),
+        );
+        return []; // No commands — safe no-op
+      }
     },
   );
 }
