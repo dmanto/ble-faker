@@ -2,6 +2,9 @@ import type { MojoApp } from "@mojojs/core";
 import type { Device } from "react-native-ble-plx";
 import vm from "node:vm";
 
+export type DeviceLogEntry = { level: "log" | "warn" | "error"; message: string };
+export type DeviceLogicOutput = { result: unknown; logs: DeviceLogEntry[] };
+
 type DeviceEvent =
   | { kind: "start" }
   | { kind: "tick" }
@@ -67,7 +70,13 @@ export function registerPlugins(app: MojoApp): void {
       deviceCode: string,
       currentState: Record<string, unknown>,
       event: DeviceEvent,
-    ): unknown => {
+    ): DeviceLogicOutput => {
+      const logs: DeviceLogEntry[] = [];
+      const capture =
+        (level: DeviceLogEntry["level"]) =>
+        (...args: unknown[]) =>
+          logs.push({ level, message: args.map(String).join(" ") });
+
       const sandbox = {
         // Standard binary tools available without imports
         Buffer,
@@ -88,7 +97,13 @@ export function registerPlugins(app: MojoApp): void {
         // Deep-cloned so logic cannot mutate server state directly
         state: JSON.parse(JSON.stringify(currentState)) as Record<string, unknown>,
         event,
-        console,
+
+        // Captured console — forwarded to browser view via WebSocket (TODO)
+        console: {
+          log: capture("log"),
+          warn: capture("warn"),
+          error: capture("error"),
+        },
       };
 
       const context = vm.createContext(sandbox);
@@ -101,13 +116,11 @@ export function registerPlugins(app: MojoApp): void {
           state: Record<string, unknown>,
           event: DeviceEvent,
         ) => unknown;
-        return fn(sandbox.state, sandbox.event);
+        return { result: fn(sandbox.state, sandbox.event), logs };
       } catch (err) {
-        console.error(
-          "Device logic error:",
-          err instanceof Error ? err.message : String(err),
-        );
-        return []; // No commands — safe no-op
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("Device logic error:", message);
+        return { result: [], logs: [{ level: "error", message }] };
       }
     },
   );
