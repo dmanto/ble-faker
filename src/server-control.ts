@@ -29,7 +29,7 @@ async function start({
   child.unref();
 
   const url = `http://127.0.0.1:${port}`;
-  const deadline = Date.now() + 10_000;
+  const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     try {
       const res = await fetch(url);
