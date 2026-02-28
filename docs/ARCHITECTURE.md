@@ -16,7 +16,10 @@ The server is a `@mojojs/core` application started via `npx ble-faker --dir <pat
 
 - `GET /` — returns `{ version, dir }` as JSON.
 
-The server includes a BLE advertising size validator (`calculateAdvertizingSize` in `src/plugins.ts`) that computes the byte length of an advertising packet and validates it against the 31-byte legacy BLE limit.
+The server includes two mojo helpers registered in `src/plugins.ts`:
+
+- **`calculateAdvertizingSize`** — computes the byte length of an advertising packet and validates it against the 31-byte legacy BLE limit.
+- **`runDeviceLogic`** — sandboxed execution engine for device `.js` logic files (see below).
 
 ### 2. CLI Entry Point
 
@@ -36,7 +39,39 @@ A programmatic interface for use in tests and app-side mock code:
 
 Exported from `src/index.ts` so it is available as `import { bleMockServer } from 'ble-faker'`.
 
-### 5. CI
+### 5. Device Logic Sandbox (`runDeviceLogic`)
+
+Device `.js` files export a single default function:
+
+```js
+export default function(state, event) {
+  if (event.kind === 'tick') {
+    return [['2A37', utils.packUint16(72)]];
+  }
+  return [];
+}
+```
+
+`runDeviceLogic` executes this safely via `node:vm`:
+
+- **Isolation**: runs in a `vm.createContext` sandbox with no access to `process`, filesystem, or network.
+- **ESM compatibility**: strips `export default` before evaluation so `vm.Script` (CommonJS) can handle it.
+- **Timeout**: 50ms CPU limit prevents runaway logic.
+- **Available globals** (no imports needed): `Buffer`, `Uint8Array`, `DataView`, and a `utils` object with `toBase64`, `fromBase64`, `packUint16`.
+- **Console capture**: `console.log/warn/error` inside logic files are captured into a `logs` array rather than written to stdout. Returns `DeviceLogicOutput { result, logs }` — logs will be forwarded to the browser device view via WebSocket (planned).
+- **Event system**: the `event` argument is a typed discriminated union (`DeviceEvent`) covering all lifecycle and interaction events:
+
+| kind | description |
+|---|---|
+| `start` | server/device initialization |
+| `tick` | periodic timer update |
+| `reload` | mock file changed on disk |
+| `advertise` | server requests advertising packet data |
+| `describe` | server requests UI schema for browser view |
+| `notify` | characteristic notification triggered (`uuid`) |
+| `input` | browser POSTed an action (`id`, `payload`) |
+
+### 6. CI
 
 Three-platform matrix (ubuntu, macos, windows) via `.github/workflows/ci.yml`, running `pnpm build:test` on Node 23. Automatic release PR management via `release-please`.
 
@@ -69,13 +104,13 @@ Once a device is discovered and connected, WebSocket routes will handle the ongo
   - **Downlink (Server → App)**: Pushes state changes from the `.js` script via `setCharacteristicValue()`.
   - **Uplink (App → Server)**: Captures app writes via `onCharacteristicWrite` and pushes them back to the logic engine.
 
-### Mock Device Logic
+### Mock Device Logic (file conventions)
 
-Each device will be defined by:
+The sandbox engine is implemented (see §5). Still needed:
 
-- `gatt-profile.json`: GATT tree (Services and Characteristics).
-- `<id>.js`: Scriptable logic file managing device state and responding to events (`start`, `tick`, `notify`). Runs in a `node:vm` isolated context — no access to `process`, filesystem, or network.
-- **State Engine**: JSONPath-based instructions to push updates.
+- `gatt-profile.json` file format and loader.
+- `<id>.js` file watcher (chokidar, already a dependency) triggering `reload` events.
+- **State Engine**: JSONPath-based instructions to apply the `result` commands returned by `runDeviceLogic`.
 
 ### App-Side Integration
 
