@@ -112,6 +112,56 @@ The sandbox engine is implemented (see §5). Still needed:
 - `<id>.js` file watcher (chokidar, already a dependency) triggering `reload` events.
 - **State Engine**: JSONPath-based instructions to apply the `result` commands returned by `runDeviceLogic`.
 
-### App-Side Integration
+### App-Side Integration (`ble-faker/mock`)
 
-The project will integrate with `react-native-ble-plx-mock` on the React Native side, allowing the application to use the standard `BleManager` API while the bridge handles synchronization with the Mojo server transparently.
+The package will expose a `./mock` subpath export (`dist/mock.js`) that acts as a drop-in replacement for `react-native-ble-plx` via Metro's module remapping:
+
+```js
+// metro.config.js
+const isMockMode = process.env.BLE_MOCK === 'true';
+module.exports = {
+  resolver: {
+    extraNodeModules: isMockMode ? {
+      'react-native-ble-plx': require.resolve('ble-faker/mock'),
+    } : {},
+  },
+};
+```
+
+The app imports `react-native-ble-plx` normally — no code changes needed to enable mock mode.
+
+#### Implementation
+
+`ble-faker/mock` re-exports the full surface of `react-native-ble-plx-mock` and replaces `BleManager` with a subclass that wires the polling loop into the scan lifecycle:
+
+```ts
+import { BleManager as MockManager } from 'react-native-ble-plx-mock';
+
+export class BleManager extends MockManager {
+  constructor() {
+    super();
+    this.onStartScan(() => startPolling(this));
+    this.onStopScan(() => stopPolling());
+  }
+}
+export * from 'react-native-ble-plx-mock'; // re-export Device, Characteristic, etc.
+```
+
+`react-native-ble-plx-mock` (owned by dmanto) already exposes `onStartScan`/`onStopScan` hooks and `addMockDevice()`/`clearMockedDevices()` as instance methods — no changes to that library needed.
+
+#### Polling loop (inside `ble-faker/mock`)
+
+Runs in the React Native app, uses only `fetch` and `expo-constants` (no Node.js built-ins):
+
+1. Derive server URL from `Constants.expoConfig.hostUri` (Expo dev server host) + configured ble-faker port.
+2. `GET /devices` — if unreachable, treat as empty list.
+3. `manager.clearMockedDevices()` unconditionally.
+4. `manager.addMockDevice(d)` for each device returned.
+
+An `inProgress` flag prevents overlapping polls. Interval is configurable (default 5s).
+
+#### Constraints
+
+- Expo / Metro only — URL derivation relies on `expo-constants`.
+- Dev builds only — `hostUri` is not available in production bundles.
+- `react-native-ble-plx-mock` must be listed as a `peerDependency`.
