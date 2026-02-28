@@ -1,0 +1,17 @@
+{
+  "serviceUUIDs": ["180D"],
+  "isConnectable": true,
+  "mtu": 247,
+  "manufacturerData": "SGVsbG8gTW9qbw==",
+  "services": [
+    {
+      "uuid": "180D",
+      "characteristics": [
+        {
+          "uuid": "2A37",
+          "properties": { "read": true, "notify": true }
+        }
+      ]
+    }
+  ]
+}

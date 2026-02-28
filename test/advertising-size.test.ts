@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 app.log.level = "trace";
 const ctx = app.newMockContext();
 
-test.suite("Mojo Helpers - calculateAdvertizingSize", async () => {
+test.suite("calculateAdvertizingSize", async () => {
   await test("should account for mandatory 3-byte Flags", async () => {
     const size = ctx.calculateAdvertizingSize({ id: "test" });
     assert.equal(size, 3, "Empty device should still have 3 bytes for Flags");

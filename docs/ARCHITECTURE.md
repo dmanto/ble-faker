@@ -44,9 +44,9 @@ Exported from `src/index.ts` so it is available as `import { bleMockServer } fro
 Device `.js` files export a single default function:
 
 ```js
-export default function(state, event) {
-  if (event.kind === 'tick') {
-    return [['2A37', utils.packUint16(72)]];
+export default function (state, event) {
+  if (event.kind === "tick") {
+    return [["2A37", utils.packUint16(72)]];
   }
   return [];
 }
@@ -61,15 +61,15 @@ export default function(state, event) {
 - **Console capture**: `console.log/warn/error` inside logic files are captured into a `logs` array rather than written to stdout. Returns `DeviceLogicOutput { result, logs }` — logs will be forwarded to the browser device view via WebSocket (planned).
 - **Event system**: the `event` argument is a typed discriminated union (`DeviceEvent`) covering all lifecycle and interaction events:
 
-| kind | description |
-|---|---|
-| `start` | server/device initialization |
-| `tick` | periodic timer update |
-| `reload` | mock file changed on disk |
-| `advertise` | server requests advertising packet data |
-| `describe` | server requests UI schema for browser view |
-| `notify` | characteristic notification triggered (`uuid`) |
-| `input` | browser POSTed an action (`id`, `payload`) |
+| kind        | description                                    |
+| ----------- | ---------------------------------------------- |
+| `start`     | server/device initialization                   |
+| `tick`      | periodic timer update                          |
+| `reload`    | mock file changed on disk                      |
+| `advertise` | server requests advertising packet data        |
+| `describe`  | server requests UI schema for browser view     |
+| `notify`    | characteristic notification triggered (`uuid`) |
+| `input`     | browser POSTed an action (`id`, `payload`)     |
 
 ### 6. CI
 
@@ -118,12 +118,14 @@ The package will expose a `./mock` subpath export (`dist/mock.js`) that acts as 
 
 ```js
 // metro.config.js
-const isMockMode = process.env.BLE_MOCK === 'true';
+const isMockMode = process.env.BLE_MOCK === "true";
 module.exports = {
   resolver: {
-    extraNodeModules: isMockMode ? {
-      'react-native-ble-plx': require.resolve('ble-faker/mock'),
-    } : {},
+    extraNodeModules: isMockMode
+      ? {
+          "react-native-ble-plx": require.resolve("ble-faker/mock"),
+        }
+      : {},
   },
 };
 ```
@@ -135,7 +137,7 @@ The app imports `react-native-ble-plx` normally — no code changes needed to en
 `ble-faker/mock` re-exports the full surface of `react-native-ble-plx-mock` and replaces `BleManager` with a subclass that wires the polling loop into the scan lifecycle:
 
 ```ts
-import { BleManager as MockManager } from 'react-native-ble-plx-mock';
+import { BleManager as MockManager } from "react-native-ble-plx-mock";
 
 export class BleManager extends MockManager {
   constructor() {
@@ -144,7 +146,7 @@ export class BleManager extends MockManager {
     this.onStopScan(() => stopPolling());
   }
 }
-export * from 'react-native-ble-plx-mock'; // re-export Device, Characteristic, etc.
+export * from "react-native-ble-plx-mock"; // re-export Device, Characteristic, etc.
 ```
 
 `react-native-ble-plx-mock` (owned by dmanto) already exposes `onStartScan`/`onStopScan` hooks and `addMockDevice()`/`clearMockedDevices()` as instance methods — no changes to that library needed.

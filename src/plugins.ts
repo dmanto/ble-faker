@@ -2,7 +2,10 @@ import type { MojoApp } from "@mojojs/core";
 import type { Device } from "react-native-ble-plx";
 import vm from "node:vm";
 
-export type DeviceLogEntry = { level: "log" | "warn" | "error"; message: string };
+export type DeviceLogEntry = {
+  level: "log" | "warn" | "error";
+  message: string;
+};
 export type DeviceLogicOutput = { result: unknown; logs: DeviceLogEntry[] };
 
 type DeviceEvent =
@@ -70,6 +73,7 @@ export function registerPlugins(app: MojoApp): void {
       deviceCode: string,
       currentState: Record<string, unknown>,
       event: DeviceEvent,
+      timeout = 50,
     ): DeviceLogicOutput => {
       const logs: DeviceLogEntry[] = [];
       const capture =
@@ -78,6 +82,10 @@ export function registerPlugins(app: MojoApp): void {
           logs.push({ level, message: args.map(String).join(" ") });
 
       const sandbox = {
+        // Explicitly shadow Node.js globals that could otherwise leak through the prototype chain
+        process: undefined,
+        require: undefined,
+
         // Standard binary tools available without imports
         Buffer,
         Uint8Array,
@@ -95,7 +103,10 @@ export function registerPlugins(app: MojoApp): void {
         },
 
         // Deep-cloned so logic cannot mutate server state directly
-        state: JSON.parse(JSON.stringify(currentState)) as Record<string, unknown>,
+        state: JSON.parse(JSON.stringify(currentState)) as Record<
+          string,
+          unknown
+        >,
         event,
 
         // Captured console — forwarded to browser view via WebSocket (TODO)
@@ -112,13 +123,18 @@ export function registerPlugins(app: MojoApp): void {
         // Strip `export default` so vm.Script (CommonJS) can evaluate the function
         const cjsCode = deviceCode.replace("export default", "__export =");
         const wrapped = `let __export;\n${cjsCode}\n__export`;
-        const fn = vm.runInContext(wrapped, context, { timeout: 50 }) as (
+        const fn = vm.runInContext(wrapped, context, { timeout }) as (
           state: Record<string, unknown>,
           event: DeviceEvent,
         ) => unknown;
-        return { result: fn(sandbox.state, sandbox.event), logs };
+        // JSON round-trip normalises vm-context objects/arrays into host objects,
+        // making the result safe to serialise and compare with deepEqual.
+        const raw = fn(sandbox.state, sandbox.event);
+        return { result: JSON.parse(JSON.stringify(raw)), logs };
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        // Use stack for line position info; line numbers are offset by 1 due to the `let __export;` prefix
+        const message =
+          err instanceof Error ? (err.stack ?? err.message) : String(err);
         console.error("Device logic error:", message);
         return { result: [], logs: [{ level: "error", message }] };
       }
