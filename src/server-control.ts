@@ -2,8 +2,14 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const STATE_FILE = path.join(os.homedir(), ".ble-faker-server.json");
+
+// Locate dist/bin.js alongside this module at runtime.
+// We deliberately avoid `new URL("./bin.js", import.meta.url)` because Vite
+// intercepts that pattern in library builds and inlines the file as a data URL.
+const BIN_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "bin.js");
 
 interface ServerState {
   pid: number;
@@ -17,13 +23,14 @@ async function start({
   dir = "./mocks",
   port = 3000,
 }: { dir?: string; port?: number } = {}): Promise<void> {
+  // Spawn node directly — avoids npx startup overhead (10-20s on Windows).
   const spawnOptions =
     process.platform === "win32"
-      ? { shell: true, stdio: "ignore" as const }
+      ? { stdio: "ignore" as const }
       : { stdio: "ignore" as const, detached: true };
   child = spawn(
-    "npx",
-    [".", "--dir", dir, "--port", String(port)],
+    process.execPath,
+    [BIN_PATH, "--dir", dir, "--port", String(port)],
     spawnOptions,
   );
   child.unref();
