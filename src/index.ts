@@ -2,6 +2,7 @@ import mojo, { Logger, type MojoApp } from "@mojojs/core";
 import { registerPlugins } from "./plugins.js";
 import fs from "node:fs";
 import { STATE_FILE } from "./server-control.js";
+import { Store } from "./models/store.js";
 
 export const app: MojoApp = mojo();
 app.log.formatter = Logger.systemdFormatter;
@@ -19,6 +20,7 @@ app.get("/", async (ctx) => {
 });
 
 app.onStart(async () => {
+  app.models.store = new Store();
   const port = (app.config.port as number | undefined) ?? 3000;
   const url = `http://127.0.0.1:${port}`;
   fs.writeFileSync(STATE_FILE, JSON.stringify({ pid: process.pid, url, port }));
@@ -33,3 +35,7 @@ app.onStop(async () => {
 void app.start();
 
 export { bleMockServer } from "./server-control.js";
+export { Store, sanitizeDeviceId } from "./models/store.js";
+export { applyCommands, initDeviceState, emptyDeviceState } from "./state-engine.js";
+export type { DeviceState, DeviceEntry, UiControl } from "./models/store.js";
+export type { ApplyResult } from "./state-engine.js";

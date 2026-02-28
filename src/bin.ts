@@ -50,6 +50,11 @@ process.on("SIGINT", () => {
   process.exit(0);
 });
 
+if (serverArgs.includes('--cluster')) {
+  process.stderr.write('ble-faker: --cluster is not supported (device state is in-process memory)\n');
+  process.exit(1);
+}
+
 app.config.mocksDir = dir;
 app.config.port = parseInt(port, 10);
 void app.cli.start("server", "-l", `http://*:${port}`, ...serverArgs);
