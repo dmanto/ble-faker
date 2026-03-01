@@ -1,150 +1,200 @@
-# 🧬 BLE Live Mock Server
+# ble-faker
 
 [![CI](https://github.com/dmanto/ble-faker/actions/workflows/ci.yml/badge.svg)](https://github.com/dmanto/ble-faker/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/ble-faker)](https://www.npmjs.com/package/ble-faker)
 [![License: MIT](https://img.shields.io/npm/l/ble-faker)](https://github.com/dmanto/ble-faker/blob/main/LICENSE)
 
-A universal **Bluetooth Low Energy (BLE)** peripheral emulator powered by [mojo.js](https://mojojs.org/). This server allows mobile developers to simulate complex hardware behavior by simply editing JSON files in their IDE.
-
-Changes to your mock files are broadcasted in **real-time** via WebSockets to your React Native app, enabling a "Hot Reload" experience for hardware integration.
+Scriptable BLE peripheral simulator for React Native developers. Run realistic hardware simulations on your dev machine — no physical devices required.
 
 ---
 
-## ✨ Features
+## The problem
 
-- **File-Based GATT Table:** Every device is a `.json` file. No massive, unmanageable config objects.
-- **Live Sync:** Powered by WebSockets. Save a file in VS Code → App updates instantly.
-- **Bidirectional:** Supports both reading from the mock and writing back (Mojo can update the JSON on disk).
-- **Logic Offloading:** Move complex sensor math (heart rate drift, battery curves) from the app to the Node.js server.
-- **Universal:** Works with any BLE library, but optimized for `react-native-ble-plx-mock`.
+Building React Native apps that talk to BLE hardware is slow and fragile to test:
+
+- You need a physical device on hand to verify any change
+- Bugs that only appear on specific hardware models or firmware versions are hard to reproduce
+- AI-assisted development moves fast, but every "does this work?" still means reaching for a sensor
+- Demos, CI runs, and code reviews can't easily include live hardware
+
+**ble-faker** solves this by running a local BLE peripheral server that your app connects to instead of real hardware. You define device behavior in plain JavaScript — edit a file, see the change in your app.
 
 ---
 
-## 📂 Project Structure
+## How it works
 
-```text
-bridge-server-app/
-├── mocks/
-│   ├── heart-rate-monitors/       # Category folder (example)
-│   │   ├── gatt-profile.json            # GATT structure (see below)
-│   │   ├── FF-00-11-22-33-02.js   # Instance 1: "Simulated Runner"
-│   │   └── AA-BB-CC-DD-EE-99.js   # Instance 2: "Tachycardia Test"
-│   └── battery/                   # Category folder (other example)
-│       ├── gatt-profile.json
-│       └── 01-23-45-67-89-AB.js    # Some battery
-├── src/
-│   ├── index.ts         # Mojo entry point & WebSocket routing
-│   ├── models/          # Mojo models
-│   ├── plugins.ts       # Plugin engines (i.e. watches files & broadcasts)
-│   └── controllers/     # Handlers for Browser Dashboard & BLE Sync
-├── views/               # Mojo view templates go here
-├── test/                # Mojo TestUserAgent integration tests
-├── dist/                # Production build (ignored by git)
-├── config.json          # app configuration
-├── .npmrc               # pnpm configuration
-├── .oxlintrc.json
-├── package.json         # Managed via pnpm
-├── pnpm-lock.json       # pnpm's deterministic lockfile
-├── vite.config.js
-└── tsconfig.json        # Strict TS config for IDE support
+1. Create a **category folder** with a `gatt-profile.json` describing the GATT structure
+2. Add one or more **device files** named by MAC address (e.g. `FF-00-11-22-33-02.js`) containing simulation logic
+3. Start the server — it exposes the devices to your React Native app via the mock bridge
+
+Just `touch FF-00-11-22-33-02.js` to get a working device with no code: characteristics are auto-wired as inputs/outputs from the profile, with an ESP32-style default name.
+
+---
+
+## Getting Started
+
+### 1. Install
+
+```shell
+pnpm add -D ble-faker
 ```
 
----
+### 2. Create a mock folder
 
-## 🚀 Getting Started
+```text
+mocks/
+└── heart-rate-monitors/
+    ├── gatt-profile.json
+    └── FF-00-11-22-33-02.js
+```
 
-### 1. Installation
+**`gatt-profile.json`** — the GATT structure, mirrors the `addMockDevice()` payload:
 
-pnpm add -D ble-live-mock-server
-
-### 2. Initialize Mocks
-
-Create a folder named `ble-specs` in your project root with a `gatt-profile.json`:
-
-````json
+```json
 {
   "serviceUUIDs": ["180D"],
+  "isConnectable": true,
+  "mtu": 247,
+  "manufacturerData": "SGVsbG8gTW9qbw==",
   "services": [
     {
       "uuid": "180D",
       "characteristics": [
-        {
-          "uuid": "2A37",
-          "properties": { "read": true, "notify": true }
-        }
+        { "uuid": "2A37", "properties": { "read": true, "notify": true } },
+        { "uuid": "2A39", "properties": { "write": true } }
       ]
     }
   ]
-}```
+}
+```
 
-### 3. Start the Server
+**`FF-00-11-22-33-02.js`** — device logic (or `touch` it for auto-generated defaults):
 
-# Binds to 0.0.0.0 to allow connections from emulators and physical devices
-
-```shell
-npx ble-live-mock -d ./ble-specs -p 58083
-````
-
-The server will start on `http://0.0.0.0:58083`.
-
-## 🧠 Logic Engines (.js)
-
-For dynamic behavior, create a .js file matching a MAC address (XX-XX-XX-XX-XX-XX.json) or device ID (myId.json), inside the category folder.
-
-Input: state (current data), event (start | tick | notify)
-Output: Array<[UUID, Base64Value]> (Deltas to apply)
-
-```JavaScript
-export default function(state, event) {
-  if (event.kind === 'tick') {
-    const hr = Math.floor(60 + Math.random() * 5);
-    return [['2A37', Buffer.from([0, hr]).toString('base64')]];
+```js
+export default function (state, event) {
+  if (event.kind === "start") {
+    return [
+      { name: "HR Monitor", rssi: -65 },
+      { out: [{ name: "2A37", label: "Heart Rate" }] },
+      { in: [{ name: "2A39", label: "Reset" }] },
+    ];
   }
+
+  if (event.kind === "tick") {
+    const hr = state.vars.hr ?? 72;
+    return [["2A37", utils.packUint16(hr)], { set: { "2A37": String(hr) } }];
+  }
+
+  if (event.kind === "input" && event.id === "2A39") {
+    return [{ vars: { hr: 72 } }];
+  }
+
   return [];
 }
 ```
 
-## 🛡️ Sandbox Security
+### 3. Start the server
 
-## Scripts run in a node:vm isolated context. They cannot access process, filesystem, or network. They are pure functions designed to safely simulate hardware state transitions.
-
-## 📱 React Native Integration
-
-To connect your app to the live mock, use the WebSocket bridge. It automatically detects your Metro server's IP to ensure connectivity on both physical devices and emulators.
-
-```javascript
-import { NativeModules } from "react-native";
-import { ConnectToBridge } from "react-native-ble-mocker";
-import { MockBleManager } from "react-native-ble-plx-mock";
-
-const getWsUrl = () => {
-  // Extract the host from the Metro bundle URL (handles localhost vs LAN IP)
-  const scriptURL = NativeModules.SourceCode.scriptURL;
-  if (!scriptURL) return "ws://localhost:58083/ble-bridge";
-
-  const host = scriptURL.split("://")[1].split(":")[0];
-  return `ws://${host}:58083/ble-bridge`;
-};
-
-// Connect and pipe into your mock manager
-ConnectToBridge(MockBleManager, getWsUrl);
+```shell
+npx ble-faker --dir ./mocks --port 58083
 ```
 
 ---
 
-## 🛠 Development Commands
+## Device Logic
 
-| Command      | Description                                           |
-| :----------- | :---------------------------------------------------- |
-| `pnpm dev`   | Starts Mojo server with `--watch` for logic changes.  |
-| `pnpm test`  | Runs native Node.js tests for the GATT logic.         |
-| `pnpm build` | Compiles TypeScript to the `dist/` folder using Vite. |
-| `pnpm lint`  | Runs `oxlint` for high-speed code quality checks.     |
+Each `.js` file exports a single default function. It receives the current `state` and an `event`, returns an array of commands:
+
+```js
+export default function (state, event) {
+  // state.dev   — full GATT profile (read-only; includes services array)
+  // state.vars  — your persisted values from previous calls (read-only)
+  // state.chars — current characteristic values by UUID { uuid: base64 }
+  // state.ui    — current browser UI controls { ins, outs }
+  return [...commands];
+}
+```
+
+State is **read-only** inside the function — direct writes (`state.hr = 42`) are silently discarded. Use `{ vars: { hr: 42 } }` to persist values.
+
+### Events
+
+| `event.kind` | when                                                      |
+| ------------ | --------------------------------------------------------- |
+| `start`      | server/device initialization                              |
+| `tick`       | periodic timer                                            |
+| `reload`     | logic file changed on disk                                |
+| `advertise`  | server building the advertising packet                    |
+| `notify`     | characteristic notification — `uuid` + `payload` (base64) |
+| `input`      | browser UI field submitted — `id` + `payload`             |
+
+### Return commands
+
+| Shape                         | Effect                                                        |
+| ----------------------------- | ------------------------------------------------------------- |
+| `['2A37', base64]`            | Update a GATT characteristic value                            |
+| `{ name, rssi, … }`           | Patch the advertising packet (any `Partial<Device>` field)    |
+| `{ in: [{ name, label }] }`   | Define browser input controls (text + submit → `input` event) |
+| `{ out: [{ name, label }] }`  | Define browser output display fields                          |
+| `{ set: { field: 'value' } }` | Push a string to a named output field via WebSocket           |
+| `{ vars: { key: value } }`    | Persist values into `state.vars` for the next call            |
+
+### Available globals (no imports needed)
+
+| Global                   | Description                              |
+| ------------------------ | ---------------------------------------- |
+| `Buffer`                 | Node.js Buffer                           |
+| `Uint8Array`, `DataView` | Binary views                             |
+| `utils.toBase64(arr)`    | `Uint8Array → base64 string`             |
+| `utils.fromBase64(str)`  | `base64 → Buffer`                        |
+| `utils.packUint16(n)`    | little-endian uint16 → base64            |
+| `console.log/warn/error` | captured and forwarded to the browser UI |
+
+### Sandbox security
+
+Logic files run in an isolated `node:vm` context. They cannot access `process`, `require`, the filesystem, or the network. They are pure functions that safely simulate hardware state transitions.
 
 ---
 
-## 🤝 Contributing
+## Default behavior (empty `.js` file)
 
-This project is built with **mojo.js**. As a community-driven tool, feel free to submit PRs focusing on the reactivity engine, file-watcher performance, or adding new BLE service templates.
+`touch FF-00-11-22-33-02.js` gives you a working device without any code:
+
+- **Device name**: `ESP32_` + last 5 hex chars of the MAC address
+- **RSSI**: −65 dBm
+- Characteristics with `read`/`notify` → browser output fields, labeled from the standard GATT table
+- Characteristics with `write` → browser input fields
+
+Use this to verify your profile is correct, then add logic as needed.
+
+---
+
+## Programmatic API
+
+```ts
+import { bleMockServer } from "ble-faker";
+
+await bleMockServer.start({ dir: "./mocks", port: 58083 });
+const info = await bleMockServer.get(); // { version, dir }
+await bleMockServer.stop();
+```
+
+---
+
+## Development commands
+
+| Command           | Description                             |
+| :---------------- | :-------------------------------------- |
+| `pnpm dev`        | Watch mode (rebuilds on source changes) |
+| `pnpm build`      | Compile to `dist/`                      |
+| `pnpm test`       | Run tests (Node.js native test runner)  |
+| `pnpm build:test` | Build + test in one step                |
+| `pnpm lint`       | oxlint                                  |
+
+---
+
+## Contributing
+
+PRs welcome. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the internal design.
 
 **License:** MIT
