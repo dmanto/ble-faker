@@ -121,7 +121,7 @@ test.suite("initDeviceState", async () => {
     assert.equal(state.dev["isConnectable"], true);
     assert.equal(state.dev["mtu"], 247);
     assert.equal(state.dev["manufacturerData"], "SGVsbG8gTW9qbw==");
-    assert.ok(!("services" in state.dev));
+    assert.ok("services" in state.dev);
 
     // chars should have empty string for each characteristic uuid
     assert.equal(state.chars["2A37"], "");

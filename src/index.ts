@@ -37,5 +37,7 @@ void app.start();
 export { bleMockServer } from "./server-control.js";
 export { Store, sanitizeDeviceId } from "./models/store.js";
 export { applyCommands, initDeviceState, emptyDeviceState } from "./state-engine.js";
+export { GATT_LABELS } from "./gatt-labels.js";
+export { DEFAULT_DEVICE_CODE } from "./default-device.js";
 export type { DeviceState, DeviceEntry, UiControl } from "./models/store.js";
 export type { ApplyResult } from "./state-engine.js";

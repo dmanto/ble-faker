@@ -20,9 +20,9 @@ export function initDeviceState(categoryDir: string): DeviceState {
   const profilePath = path.join(categoryDir, 'gatt-profile.json');
   const raw = JSON.parse(fs.readFileSync(profilePath, 'utf-8')) as Record<string, unknown>;
 
-  const { services, ...devFields } = raw;
-
+  // Keep the full profile (including services) in state.dev — addMockDevice() needs it all.
   const chars: Record<string, string> = {};
+  const services = raw['services'];
   if (Array.isArray(services)) {
     for (const service of services as Array<{ characteristics?: Array<{ uuid: string }> }>) {
       for (const char of service.characteristics ?? []) {
@@ -32,7 +32,7 @@ export function initDeviceState(categoryDir: string): DeviceState {
   }
 
   return {
-    dev: devFields as Record<string, unknown>,
+    dev: raw,
     vars: {},
     chars,
     ui: { ins: [], outs: [] },
