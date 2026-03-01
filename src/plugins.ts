@@ -8,12 +8,11 @@ export type DeviceLogEntry = {
 };
 export type DeviceLogicOutput = { result: unknown; logs: DeviceLogEntry[] };
 
-type DeviceEvent =
+export type DeviceEvent =
   | { kind: "start" }
   | { kind: "tick" }
   | { kind: "reload" }
   | { kind: "advertise" }
-  | { kind: "describe" }
   | { kind: "notify"; uuid: string; payload: string }
   | { kind: "input"; id: string; payload: string };
 

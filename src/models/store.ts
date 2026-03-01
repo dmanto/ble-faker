@@ -1,3 +1,5 @@
+import { EventEmitter } from "node:events";
+
 export interface UiControl {
   name: string;
   label: string;
@@ -13,7 +15,9 @@ export interface DeviceState {
 export interface DeviceEntry {
   id: string;
   categoryDir: string;
+  jsFilePath: string;
   state: DeviceState;
+  events: EventEmitter;
 }
 
 export function sanitizeDeviceId(raw: string): string {
