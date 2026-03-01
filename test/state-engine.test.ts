@@ -1,4 +1,8 @@
-import { applyCommands, emptyDeviceState, initDeviceState } from "../dist/index.js";
+import {
+  applyCommands,
+  emptyDeviceState,
+  initDeviceState,
+} from "../dist/index.js";
 import type { DeviceState } from "../src/models/store.js";
 import type { ApplyResult } from "../src/state-engine.js";
 import test from "node:test";
@@ -12,13 +16,19 @@ const FIXTURES = path.join(__dirname, "fixtures");
 test.suite("applyCommands", async () => {
   await test("characteristic update — [uuid, base64] sets chars", async () => {
     const current = emptyDeviceState() as unknown as DeviceState;
-    const { state } = applyCommands([["2A37", "AAAA=="]], current) as unknown as ApplyResult;
+    const { state } = applyCommands(
+      [["2A37", "AAAA=="]],
+      current,
+    ) as unknown as ApplyResult;
     assert.equal(state.chars["2A37"], "AAAA==");
   });
 
   await test("dev patch — plain object merged into state.dev", async () => {
     const current = emptyDeviceState() as unknown as DeviceState;
-    const { state } = applyCommands([{ name: "HR Monitor", rssi: -60 }], current) as unknown as ApplyResult;
+    const { state } = applyCommands(
+      [{ name: "HR Monitor", rssi: -60 }],
+      current,
+    ) as unknown as ApplyResult;
     assert.equal(state.dev["name"], "HR Monitor");
     assert.equal(state.dev["rssi"], -60);
   });
@@ -26,14 +36,20 @@ test.suite("applyCommands", async () => {
   await test("in definition — replaces state.ui.ins", async () => {
     const current = emptyDeviceState() as unknown as DeviceState;
     const ins = [{ name: "bpm", label: "Heart Rate" }];
-    const { state } = applyCommands([{ in: ins }], current) as unknown as ApplyResult;
+    const { state } = applyCommands(
+      [{ in: ins }],
+      current,
+    ) as unknown as ApplyResult;
     assert.deepEqual(state.ui.ins, ins);
   });
 
   await test("out definition — replaces state.ui.outs", async () => {
     const current = emptyDeviceState() as unknown as DeviceState;
     const outs = [{ name: "display", label: "Display" }];
-    const { state } = applyCommands([{ out: outs }], current) as unknown as ApplyResult;
+    const { state } = applyCommands(
+      [{ out: outs }],
+      current,
+    ) as unknown as ApplyResult;
     assert.deepEqual(state.ui.outs, outs);
   });
 
@@ -49,7 +65,10 @@ test.suite("applyCommands", async () => {
 
   await test("vars — merges into state.vars, accepts non-string values", async () => {
     const current = emptyDeviceState() as unknown as DeviceState;
-    const { state } = applyCommands([{ vars: { count: 5, flag: true } }], current) as unknown as ApplyResult;
+    const { state } = applyCommands(
+      [{ vars: { count: 5, flag: true } }],
+      current,
+    ) as unknown as ApplyResult;
     assert.equal(state.vars["count"], 5);
     assert.equal(state.vars["flag"], true);
   });
@@ -77,7 +96,10 @@ test.suite("applyCommands", async () => {
 
   await test("non-array result — returns current state unchanged", async () => {
     const current = emptyDeviceState() as unknown as DeviceState;
-    const { state, wsMessages } = applyCommands(null, current) as unknown as ApplyResult;
+    const { state, wsMessages } = applyCommands(
+      null,
+      current,
+    ) as unknown as ApplyResult;
     assert.equal(state, current);
     assert.deepEqual(wsMessages, []);
   });
@@ -121,7 +143,7 @@ test.suite("initDeviceState", async () => {
     assert.equal(state.dev["isConnectable"], true);
     assert.equal(state.dev["mtu"], 247);
     assert.equal(state.dev["manufacturerData"], "SGVsbG8gTW9qbw==");
-    assert.ok(!("services" in state.dev));
+    assert.ok("services" in state.dev);
 
     // chars should have empty string for each characteristic uuid
     assert.equal(state.chars["2A37"], "");

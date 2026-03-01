@@ -9,7 +9,10 @@ export const STATE_FILE = path.join(os.homedir(), ".ble-faker-server.json");
 // Locate dist/bin.js alongside this module at runtime.
 // We deliberately avoid `new URL("./bin.js", import.meta.url)` because Vite
 // intercepts that pattern in library builds and inlines the file as a data URL.
-const BIN_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "bin.js");
+const BIN_PATH = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "bin.js",
+);
 
 interface ServerState {
   pid: number;

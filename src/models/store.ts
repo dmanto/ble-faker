@@ -17,21 +17,33 @@ export interface DeviceEntry {
 }
 
 export function sanitizeDeviceId(raw: string): string {
-  return raw.trim().toLowerCase().replace(/:/g, '-');
+  return raw.trim().toLowerCase().replace(/:/g, "-");
 }
 
 export class Store {
   private devices = new Map<string, DeviceEntry>();
 
-  add(entry: DeviceEntry): void { this.devices.set(entry.id, entry); }
-  get(id: string): DeviceEntry | undefined { return this.devices.get(id); }
-  set(id: string, entry: DeviceEntry): void { this.devices.set(id, entry); }
-  remove(id: string): boolean { return this.devices.delete(id); }
-  has(id: string): boolean { return this.devices.has(id); }
-  all(): DeviceEntry[] { return Array.from(this.devices.values()); }
+  add(entry: DeviceEntry): void {
+    this.devices.set(entry.id, entry);
+  }
+  get(id: string): DeviceEntry | undefined {
+    return this.devices.get(id);
+  }
+  set(id: string, entry: DeviceEntry): void {
+    this.devices.set(id, entry);
+  }
+  remove(id: string): boolean {
+    return this.devices.delete(id);
+  }
+  has(id: string): boolean {
+    return this.devices.has(id);
+  }
+  all(): DeviceEntry[] {
+    return Array.from(this.devices.values());
+  }
 }
 
-declare module '@mojojs/core' {
+declare module "@mojojs/core" {
   interface MojoModels {
     store: Store;
   }

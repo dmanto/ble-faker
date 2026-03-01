@@ -56,28 +56,24 @@ Exported from `src/index.ts` so it is available as `import { bleMockServer } fro
 Device `.js` files export a single default function. A complete example showing all event kinds:
 
 ```js
-export default function(state, event) {
-
-  if (event.kind === 'start') {
+export default function (state, event) {
+  if (event.kind === "start") {
     return [
-      { in:  [{ name: 'target', label: 'Target HR' }] },
-      { out: [{ name: 'current', label: 'Current HR' }] },
+      { in: [{ name: "target", label: "Target HR" }] },
+      { out: [{ name: "current", label: "Current HR" }] },
     ];
   }
 
-  if (event.kind === 'advertise') {
-    return [{ name: 'HR Monitor', rssi: -65, serviceUUIDs: ['180D'] }];
+  if (event.kind === "advertise") {
+    return [{ name: "HR Monitor", rssi: -65, serviceUUIDs: ["180D"] }];
   }
 
-  if (event.kind === 'tick') {
+  if (event.kind === "tick") {
     const hr = state.vars?.hr ?? 72;
-    return [
-      ['2A37', utils.packUint16(hr)],
-      { set: { current: String(hr) } },
-    ];
+    return [["2A37", utils.packUint16(hr)], { set: { current: String(hr) } }];
   }
 
-  if (event.kind === 'input' && event.id === 'target') {
+  if (event.kind === "input" && event.id === "target") {
     return [{ vars: { hr: parseInt(event.payload, 10) } }];
   }
 
@@ -102,27 +98,27 @@ export default function(state, event) {
 
 The `event` argument is a typed discriminated union (`DeviceEvent`):
 
-| kind        | description                                                        |
-| ----------- | ------------------------------------------------------------------ |
-| `start`     | server/device initialization                                       |
-| `tick`      | periodic timer update                                              |
-| `reload`    | mock file changed on disk                                          |
-| `advertise` | server requests the current advertising packet                     |
+| kind        | description                                                         |
+| ----------- | ------------------------------------------------------------------- |
+| `start`     | server/device initialization                                        |
+| `tick`      | periodic timer update                                               |
+| `reload`    | mock file changed on disk                                           |
+| `advertise` | server requests the current advertising packet                      |
 | `notify`    | characteristic notification triggered — `uuid` + `payload` (base64) |
-| `input`     | browser submitted a form field — `id` + `payload`                 |
+| `input`     | browser submitted a form field — `id` + `payload`                   |
 
 #### Return format — command dispatch
 
 Each item in the returned array is one of the following. The server discriminates by shape:
 
-| Item shape | Discriminant | Effect |
-| --- | --- | --- |
-| `['2A37', base64]` | `Array.isArray` | Updates a GATT characteristic value |
-| `{ name, rssi, … }` | plain object | Patches `state.dev` (advertising packet — any `Partial<Device>` field) |
-| `{ in: [{ name, label }] }` | `'in' in item` | Defines browser input controls: one label + text field + submit button per entry; submit POSTs → `input` event |
-| `{ out: [{ name, label }] }` | `'out' in item` | Defines browser output display fields: one label + empty field per entry, `id` taken from `name` |
-| `{ set: { fieldName: 'val' } }` | `'set' in item` | Pushes string values to named output fields in the browser via WebSocket |
-| `{ vars: { name: anyValue } }` | `'vars' in item` | Persists any-typed values into `state.vars` for the next call — the only way to write device-local state |
+| Item shape                      | Discriminant     | Effect                                                                                                         |
+| ------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| `['2A37', base64]`              | `Array.isArray`  | Updates a GATT characteristic value                                                                            |
+| `{ name, rssi, … }`             | plain object     | Patches `state.dev` (advertising packet — any `Partial<Device>` field)                                         |
+| `{ in: [{ name, label }] }`     | `'in' in item`   | Defines browser input controls: one label + text field + submit button per entry; submit POSTs → `input` event |
+| `{ out: [{ name, label }] }`    | `'out' in item`  | Defines browser output display fields: one label + empty field per entry, `id` taken from `name`               |
+| `{ set: { fieldName: 'val' } }` | `'set' in item`  | Pushes string values to named output fields in the browser via WebSocket                                       |
+| `{ vars: { name: anyValue } }`  | `'vars' in item` | Persists any-typed values into `state.vars` for the next call — the only way to write device-local state       |
 
 `in`/`out` definitions are typically returned from `start` and `reload` events. The server applies all commands internally using JSON pointers — device code never constructs paths directly.
 
@@ -132,11 +128,11 @@ Each item in the returned array is one of the following. The server discriminate
 
 Three test files, run in parallel via `node --test test/**/*.test.ts`:
 
-| file | what it covers |
-|---|---|
-| `test/advertising-size.test.ts` | `calculateAdvertizingSize` helper (packet size arithmetic) |
-| `test/device-logic.test.ts` | `runDeviceLogic` sandbox — 14 tests covering core behaviour, utils, console capture, state isolation, error handling, and sandbox security |
-| `test/server.test.ts` | `bleMockServer` lifecycle — spawns a real server, verifies state file round-trip, stops it |
+| file                            | what it covers                                                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `test/advertising-size.test.ts` | `calculateAdvertizingSize` helper (packet size arithmetic)                                                                                 |
+| `test/device-logic.test.ts`     | `runDeviceLogic` sandbox — 14 tests covering core behaviour, utils, console capture, state isolation, error handling, and sandbox security |
+| `test/server.test.ts`           | `bleMockServer` lifecycle — spawns a real server, verifies state file round-trip, stops it                                                 |
 
 `test/fixtures/heart-rate-monitors/gatt-profile.json` holds the first example device fixture (work in progress).
 

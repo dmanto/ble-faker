@@ -50,8 +50,10 @@ process.on("SIGINT", () => {
   process.exit(0);
 });
 
-if (serverArgs.includes('--cluster')) {
-  process.stderr.write('ble-faker: --cluster is not supported (device state is in-process memory)\n');
+if (serverArgs.includes("--cluster")) {
+  process.stderr.write(
+    "ble-faker: --cluster is not supported (device state is in-process memory)\n",
+  );
   process.exit(1);
 }
 
