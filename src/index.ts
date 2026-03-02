@@ -31,16 +31,23 @@ let watcher: FSWatcher | null = null;
 app.onStart(async () => {
   const dir = String(app.config.mocksDir ?? "./mocks");
   watcher = startWatcher(dir, app.models.store);
-  const port = (app.config.port as number | undefined) ?? 3000;
-  const url = `http://127.0.0.1:${port}`;
-  fs.writeFileSync(STATE_FILE, JSON.stringify({ pid: process.pid, url, port }));
+  const port = app.config.port as number | undefined;
+  if (port !== undefined) {
+    const url = `http://127.0.0.1:${port}`;
+    fs.writeFileSync(
+      STATE_FILE,
+      JSON.stringify({ pid: process.pid, url, port }),
+    );
+  }
 });
 
 app.onStop(async () => {
   await watcher?.close();
-  try {
-    fs.unlinkSync(STATE_FILE);
-  } catch {}
+  if (app.config.port !== undefined) {
+    try {
+      fs.unlinkSync(STATE_FILE);
+    } catch {}
+  }
 });
 
 void app.start();

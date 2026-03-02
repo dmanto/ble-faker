@@ -4,7 +4,10 @@ export default class BrowserBridgeController {
   async connect(ctx: MojoContext): Promise<void> {
     const id = String(ctx.stash["id"] ?? "");
     const entry = ctx.models.store.get(id);
-    if (entry === undefined) { await ctx.notFound(); return; }
+    if (entry === undefined) {
+      await ctx.notFound();
+      return;
+    }
 
     ctx.json(async (ws) => {
       ws.send({ type: "ui", ui: entry.state.ui }).catch(() => {});
