@@ -1,19 +1,9 @@
-import fs from "node:fs";
 import type { MojoContext } from "@mojojs/core";
 import { applyCommands } from "../state-engine.js";
-import { DEFAULT_DEVICE_CODE } from "../default-device.js";
+import { readDeviceCode } from "../read-device-code.js";
 import type { DeviceEvent } from "../plugins.js";
 
 const TICK_MS = 1000;
-
-function readCode(jsFilePath: string): string {
-  try {
-    const content = fs.readFileSync(jsFilePath, "utf-8").trim();
-    return content.length === 0 ? DEFAULT_DEVICE_CODE : content;
-  } catch {
-    return DEFAULT_DEVICE_CODE;
-  }
-}
 
 export default class BleBridgeController {
   async connect(ctx: MojoContext): Promise<void> {
@@ -27,7 +17,7 @@ export default class BleBridgeController {
     ctx.json(async (ws) => {
       const runEvent = (event: DeviceEvent, emitUi = false): void => {
         const out = ctx.runDeviceLogic(
-          readCode(entry.jsFilePath),
+          readDeviceCode(entry.jsFilePath),
           entry.state,
           event,
         );

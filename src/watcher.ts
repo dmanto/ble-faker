@@ -53,12 +53,15 @@ export function startWatcher(mocksDir: string, store: Store): FSWatcher {
   return watcher;
 }
 
+const MAC_RE = /^[0-9a-f]{2}(-[0-9a-f]{2}){5}$/;
+
 function addDevice(
   jsFilePath: string,
   categoryDir: string,
   store: Store,
 ): void {
   const id = sanitizeDeviceId(path.basename(jsFilePath, ".js"));
+  if (!MAC_RE.test(id)) return;
   if (store.has(id)) return;
   const state = initDeviceState(categoryDir);
   state.dev["id"] = id;

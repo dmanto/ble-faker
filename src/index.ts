@@ -21,6 +21,7 @@ app.get("/", async (ctx) => {
   });
 });
 
+app.get("/devices").to("devices#list");
 app.websocket("/bridge/:id").to("ble-bridge#connect");
 app.websocket("/browser/:id").to("browser-bridge#connect");
 
