@@ -21,6 +21,7 @@ export default defineConfig({
       entry: {
         index: "src/index.ts",
         bin: "src/bin.ts",
+        mock: "src/mock.ts",
         ...controllerEntries,
       },
       formats: ["es"],
@@ -28,7 +29,14 @@ export default defineConfig({
     },
     rollupOptions: {
       // Don't bundle Node built-ins or Mojo core
-      external: [...builtinModules, /^@mojojs/, /node:/],
+      external: [
+        ...builtinModules,
+        /^@mojojs/,
+        /node:/,
+        "react-native-ble-plx-mock",
+        "expo-constants",
+        "react-native-ble-plx",
+      ],
       output: {
         banner: (chunk) =>
           chunk.isEntry && chunk.name === "bin" ? "#!/usr/bin/env node\n" : "",

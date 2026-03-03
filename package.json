@@ -6,6 +6,16 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": "dist/bin.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./mock": {
+      "import": "./dist/mock.js",
+      "types": "./dist/mock.d.ts"
+    }
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dmanto/ble-faker.git"
@@ -29,18 +39,23 @@
   },
   "dependencies": {
     "@mojojs/core": "latest",
-    "react-native-ble-plx": "latest",
     "chokidar": "latest",
     "jsonpath-plus": "latest",
-    "lodash": "latest"
+    "lodash": "latest",
+    "react-native-ble-plx": "latest"
+  },
+  "peerDependencies": {
+    "expo-constants": ">=13",
+    "react-native-ble-plx-mock": ">=1"
   },
   "devDependencies": {
-    "@types/node": "latest",
-    "@types/lodash": "latest",
     "@types/jsonpath-plus": "latest",
+    "@types/lodash": "latest",
+    "@types/node": "latest",
     "concurrently": "latest",
     "oxlint": "latest",
     "prettier": "latest",
+    "react-native-ble-plx-mock": "^1.2.0",
     "typescript": "latest",
     "vite": "latest"
   }
