@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Scriptable BLE simulation toolchain for React Native development",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": "dist/bin.js",
   "repository": {
     "type": "git",
@@ -18,7 +19,7 @@
     "dev:node": "node --watch src/index.ts server",
     "dev:tsc": "pnpm tsc --watch --noEmit --project tsconfig.json",
     "build": "vite build",
-    "postbuild": "node -e \"if(process.platform!=='win32')require('fs').chmodSync('dist/bin.js',0o755)\"",
+    "postbuild": "tsc --emitDeclarationOnly && node -e \"if(process.platform!=='win32')require('fs').chmodSync('dist/bin.js',0o755)\"",
     "start": "node dist/index.js server",
     "lint": "oxlint",
     "format": "prettier --write .",

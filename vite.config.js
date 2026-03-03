@@ -7,10 +7,12 @@ import path from "node:path";
 // Adding a new src/controllers/*.ts file is enough — no manual registration needed.
 // path.relative + posix join handles backslash paths on Windows.
 const controllerEntries = Object.fromEntries(
-  fs.globSync("src/controllers/*.ts").map((file) => [
-    path.relative("src", file).replace(/\.ts$/, "").split(path.sep).join("/"),
-    file,
-  ]),
+  fs
+    .globSync("src/controllers/*.ts")
+    .map((file) => [
+      path.relative("src", file).replace(/\.ts$/, "").split(path.sep).join("/"),
+      file,
+    ]),
 );
 
 export default defineConfig({
