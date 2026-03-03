@@ -24,6 +24,8 @@ export class BleManager extends MockManager {
   private _charServiceMap = new Map<string, Map<string, string>>();
   // deviceId → WebSocket
   private _bridgeWs = new Map<string, WebSocket>();
+  // messages queued while WS is still CONNECTING
+  private _bridgeQueue = new Map<string, string[]>();
 
   constructor(options: { bleFakerPort?: number } = {}) {
     super();
@@ -99,9 +101,10 @@ export class BleManager extends MockManager {
       ...args,
     );
     const [deviceId, , charUUID, value] = args;
-    this._bridgeWs
-      .get(deviceId)
-      ?.send(JSON.stringify({ uuid: charUUID.toLowerCase(), payload: value }));
+    this._sendOrQueue(deviceId, {
+      uuid: charUUID.toLowerCase(),
+      payload: value,
+    });
     return result;
   }
 
@@ -114,15 +117,33 @@ export class BleManager extends MockManager {
       ...args,
     );
     const [deviceId, , charUUID, value] = args;
-    this._bridgeWs
-      .get(deviceId)
-      ?.send(JSON.stringify({ uuid: charUUID.toLowerCase(), payload: value }));
+    this._sendOrQueue(deviceId, {
+      uuid: charUUID.toLowerCase(),
+      payload: value,
+    });
     return result;
   }
 
+  private _sendOrQueue(deviceId: string, msg: object): void {
+    const json = JSON.stringify(msg);
+    const queue = this._bridgeQueue.get(deviceId);
+    if (queue) {
+      queue.push(json);
+      return;
+    }
+    this._bridgeWs.get(deviceId)?.send(json);
+  }
+
   private _openBridge(deviceId: string): void {
-    if (this._bridgeWs.has(deviceId)) return;
+    // Close any stale bridge from a previous session before opening a fresh one
+    this._closeBridge(deviceId);
+    const queue: string[] = [];
+    this._bridgeQueue.set(deviceId, queue);
     const ws = new WebSocket(`${this._wsUrl}/bridge/${deviceId}`);
+    ws.onopen = () => {
+      this._bridgeQueue.delete(deviceId);
+      for (const msg of queue) ws.send(msg);
+    };
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(String(event.data)) as {
@@ -140,7 +161,11 @@ export class BleManager extends MockManager {
       }
     };
     ws.onclose = () => {
-      this._bridgeWs.delete(deviceId);
+      // Guard: only clean up if this ws is still the active bridge (not superseded)
+      if (this._bridgeWs.get(deviceId) === ws) {
+        this._bridgeWs.delete(deviceId);
+        this._bridgeQueue.delete(deviceId);
+      }
     };
     this._bridgeWs.set(deviceId, ws);
   }
