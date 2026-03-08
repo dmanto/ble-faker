@@ -1,14 +1,19 @@
 import { app } from "./index.js";
 import fs from "node:fs";
+import { spawn } from "node:child_process";
 import { STATE_FILE } from "./server-control.js";
 
 const usage = `Usage: ble-faker [OPTIONS]
+       ble-faker stop
 
-  npx ble-faker --dir ./ble-specs --port 58083
-  npx ble-faker -d ./mocks -p 3000 --level trace
+  npx ble-faker --port 58083
+  npx ble-faker -p 3000 --level trace
+  npx ble-faker stop
+
+Commands:
+  stop                Gracefully stop the running ble-faker server
 
 Options:
-  -d, --dir <path>    Path to mock files directory, defaults to "./mocks"
   -p, --port <port>   Port to listen on, defaults to 3000
   -h, --help          Show this help
 
@@ -16,16 +21,37 @@ Additional mojo.js server options (--level, --cluster, etc.) are passed through.
 `;
 
 const args = process.argv.slice(2);
-let dir = "./mocks";
+
+// Handle stop subcommand before anything else.
+if (args[0] === "stop") {
+  try {
+    const state = JSON.parse(fs.readFileSync(STATE_FILE, "utf8")) as {
+      pid: number;
+    };
+    if (process.platform === "win32") {
+      spawn("taskkill", ["/F", "/T", "/PID", String(state.pid)], {
+        stdio: "ignore",
+      });
+    } else {
+      process.kill(state.pid, "SIGTERM");
+    }
+    process.stdout.write(`ble-faker: sent SIGTERM to pid ${state.pid}\n`);
+  } catch {
+    process.stderr.write(
+      "ble-faker: no running server found (state file missing or unreadable)\n",
+    );
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
 let port = "3000";
 const serverArgs: string[] = [];
 
 let i = 0;
 while (i < args.length) {
   const arg = args[i]!;
-  if ((arg === "--dir" || arg === "-d") && i + 1 < args.length) {
-    dir = args[++i]!;
-  } else if ((arg === "--port" || arg === "-p") && i + 1 < args.length) {
+  if ((arg === "--port" || arg === "-p") && i + 1 < args.length) {
     port = args[++i]!;
   } else if (arg === "--help" || arg === "-h") {
     process.stdout.write(usage);
@@ -57,6 +83,5 @@ if (serverArgs.includes("--cluster")) {
   process.exit(1);
 }
 
-app.config.mocksDir = dir;
 app.config.port = parseInt(port, 10);
 void app.cli.start("server", "-l", `http://*:${port}`, ...serverArgs);

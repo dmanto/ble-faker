@@ -4,7 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Store } from "./models/store.js";
 import { sanitizeDeviceId } from "./models/store.js";
-import { initDeviceState } from "./state-engine.js";
+import { applyCommands, initDeviceState } from "./state-engine.js";
+import { runDeviceLogic } from "./plugins.js";
+import { readDeviceCode } from "./read-device-code.js";
 
 export function startWatcher(mocksDir: string, store: Store): FSWatcher {
   const absDir = path.resolve(mocksDir);
@@ -65,5 +67,30 @@ function addDevice(
   if (store.has(id)) return;
   const state = initDeviceState(categoryDir);
   state.dev["id"] = id;
-  store.add({ id, categoryDir, jsFilePath, state, events: new EventEmitter() });
+  const entry = {
+    id,
+    categoryDir,
+    jsFilePath,
+    state,
+    events: new EventEmitter(),
+  };
+  store.add(entry);
+
+  // Warm up device state before any client connects
+  // Warm up vars/ui/dev before any client connects, but leave chars empty so
+  // the ble-bridge can diff from a clean baseline on first connection.
+  const code = readDeviceCode(jsFilePath);
+  const { state: startState } = applyCommands(
+    runDeviceLogic(code, entry.state, { kind: "start" }).result,
+    entry.state,
+  );
+  entry.state.vars = startState.vars;
+  entry.state.ui = startState.ui;
+  entry.state.dev = startState.dev;
+  const { state: advState } = applyCommands(
+    runDeviceLogic(code, entry.state, { kind: "advertise" }).result,
+    entry.state,
+  );
+  entry.state.dev = advState.dev;
+  if (!("rssi" in entry.state.dev)) entry.state.dev.rssi = -65;
 }

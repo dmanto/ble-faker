@@ -12,12 +12,17 @@ The system consists of a **Simulation Server** (the engine running on the dev ma
 
 ### 1. The Simulation Engine
 
-The server is a Node.js application started via `npx ble-faker --dir <path> --port <port>` (see `src/bin.ts`). It exposes the following HTTP routes:
+The server is a Node.js application started via `npx ble-faker --port <port>` (see `src/bin.ts`). It exposes the following HTTP routes:
 
-- `GET /` — returns `{ version, dir }` as JSON.
-- `GET /devices` — returns the current list of advertising devices as an array of `MockDeviceConfig` payloads (see §10).
-- `WebSocket /bridge/:id` — per-device BLE bridge for characteristic simulation (see §11).
-- `WebSocket /browser/:id` — browser dashboard real-time UI channel (see §12).
+- `GET /` — renders an HTML namespace index page listing all active namespaces with links to their dashboards.
+- `POST /mount` — creates a new namespace for a given directory; returns `{ token, label, devicesUrl, bridgeUrl, browserUrl }`.
+- `GET /ns/:token` — renders the browser dashboard for a namespace (see §13).
+- `GET /ns/:token/devices` — returns the advertising device list for the namespace (see §11).
+- `WebSocket /ns/:token/bridge/:id` — per-device BLE bridge for characteristic simulation (see §11).
+- `WebSocket /ns/:token/browser/:id` — browser dashboard real-time UI channel (see §12).
+- `DELETE /ns/:token` — destroys a namespace and its watcher.
+
+All `/ns/:token/*` routes are guarded by a `namespaces#load` under-action that resolves the token to a `Namespace` object in the stash, returning 404 if not found.
 
 The server registers two helpers in `src/plugins.ts`:
 
@@ -50,9 +55,10 @@ Together with the `bin.ts` exit handlers, the state file is cleaned up for all t
 
 A programmatic interface for use in tests and app-side mock code:
 
-- `start({ dir, port })` — spawns the server by invoking `process.execPath` (the current Node binary) directly with `dist/bin.js`, then polls `GET /` until it responds (30s timeout). The bin path is resolved at runtime via `path.dirname(fileURLToPath(import.meta.url))` — **not** via `new URL("./bin.js", import.meta.url)`, which Vite would inline as a `data:` URL during the library build.
+- `start({ port })` — spawns the server by invoking `process.execPath` (the current Node binary) directly with `dist/bin.js`, then polls `GET /` until it responds (30s timeout). The bin path is resolved at runtime via `path.dirname(fileURLToPath(import.meta.url))` — **not** via `new URL("./bin.js", import.meta.url)`, which Vite would inline as a `data:` URL during the library build.
 - `stop()` — kills the server process. On Windows uses `taskkill /F /T` to terminate the full process tree; on Linux/macOS kills the process group via `process.kill(-pid)`.
-- `get()` — reads the state file to obtain the server URL, performs `GET /`, returns the parsed JSON body.
+- `mount({ dir, label })` — calls `POST /mount` and returns `{ token, label, devicesUrl, bridgeUrl, browserUrl }`.
+- `unmount(token)` — calls `DELETE /ns/:token`.
 
 Exported from `src/index.ts` as `import { bleMockServer } from 'ble-faker'`.
 
@@ -105,14 +111,14 @@ export default function (state, event) {
 
 The `event` argument is a typed discriminated union (`DeviceEvent`):
 
-| kind        | description                                                          |
-| ----------- | -------------------------------------------------------------------- |
-| `start`     | fired on every new bridge WebSocket connection                       |
-| `tick`      | periodic 1-second timer (while a bridge is connected)                |
-| `reload`    | mock file changed on disk (while a bridge is connected)              |
-| `advertise` | fired on each `GET /devices` request to build the advertising packet |
-| `notify`    | characteristic write from the app — `uuid` + `payload` (base64)      |
-| `input`     | browser UI form submit — `id` + `payload`                            |
+| kind        | description                                                                    |
+| ----------- | ------------------------------------------------------------------------------ |
+| `start`     | fired on every new bridge WebSocket connection                                 |
+| `tick`      | periodic 1-second timer (while a bridge is connected)                          |
+| `reload`    | mock file changed on disk (while a bridge is connected)                        |
+| `advertise` | fired on each `GET /ns/:token/devices` request to build the advertising packet |
+| `notify`    | characteristic write from the app — `uuid` + `payload` (base64)                |
+| `input`     | browser UI form submit — `id` + `payload`                                      |
 
 > **Note:** `start` fires on **every** new bridge connection, not just when the server starts. This allows per-connection state reset. `tick` and `reload` only fire while a bridge WebSocket is open.
 
@@ -133,19 +139,31 @@ Each item in the returned array is discriminated by shape:
 
 > **Note:** `state` is read-only from the device code's perspective. Writing `state.hr = 42` inside the function will silently have no effect. Use `{ vars: { hr: 42 } }` instead.
 
-### 6. Store Model (`src/models/store.ts`)
+### 6. Namespaces Model (`src/models/namespaces.ts`)
 
-Defines the shared types and the in-memory device registry:
+Each `POST /mount` call creates an isolated **Namespace** — a pairing of a `Store` and a chokidar `Watcher` for a given directory. Namespaces are identified by a UUID token.
+
+- **`Namespaces`** class holds `Map<token, Namespace>`.
+- `create(dir, label)` — starts a chokidar watcher on `dir`, creates a new `Store`, returns a `Namespace`.
+- `destroy(token)` — closes the watcher, removes from the map.
+- `get(token)` — returns the `Namespace` or `undefined`.
+- `all()` — returns `NamespaceSummary[]` (token, label, dir — no store/watcher) for the index page.
+
+`app.models.namespaces = new Namespaces()` is set synchronously in `src/index.ts` (no `onStart` needed).
+
+`MojoModels` is augmented so `ctx.models.namespaces` is typed as `Namespaces`.
+
+### 7. Store Model (`src/models/store.ts`)
+
+Defines the shared types and the in-memory device registry. One `Store` instance exists per namespace.
 
 - **`DeviceState`** — `{ dev, vars, chars, ui }` — the full runtime state for one device.
 - **`DeviceEntry`** — `{ id, categoryDir, jsFilePath, state, events }` — one registered device. The `events` field is a Node.js `EventEmitter` used to signal `reload`, `input`, and `remove` to active bridge connections.
 - **`UiControl`** — `{ name, label }` — one browser input or output control.
-- **`Store`** — `Map<id, DeviceEntry>` with `add/get/set/remove/has/all` methods, registered on `app.models.store` in `onStart`.
+- **`Store`** — `Map<id, DeviceEntry>` with `add/get/set/remove/has/all` methods.
 - **`sanitizeDeviceId(raw)`** — normalises a MAC string to lowercase with dashes.
 
-`MojoModels` is augmented so `ctx.models.store` is typed as `Store`.
-
-### 7. State Engine (`src/state-engine.ts`)
+### 8. State Engine (`src/state-engine.ts`)
 
 Pure functions — no persistent state, not a model, not accessed via `ctx.models`.
 
@@ -153,7 +171,7 @@ Pure functions — no persistent state, not a model, not accessed via `ctx.model
 - **`initDeviceState(categoryDir)`** — reads `<categoryDir>/gatt-profile.json`, puts the full parsed object into `state.dev` (services included), and initialises `state.chars` with an empty string for every characteristic UUID.
 - **`applyCommands(result, current)`** — iterates the array returned by `runDeviceLogic`, applies each command to a shallow copy of `current`, and returns `{ state, wsMessages }`. Never mutates `current`. Invalid or unrecognised items are silently skipped.
 
-### 8. GATT Labels & Default Device (`src/gatt-labels.ts`, `src/default-device.ts`)
+### 9. GATT Labels & Default Device (`src/gatt-labels.ts`, `src/default-device.ts`)
 
 - **`GATT_LABELS`** — `Record<string, string>` mapping ~120 standard GATT service and characteristic UUIDs to human-readable names. Covers Generic Access, Device Information, Heart Rate, Battery, Environmental Sensing, Blood Pressure, and more.
 - **`DEFAULT_DEVICE_CODE`** — a static JavaScript string injected by the event processor when a device `.js` file is empty (zero bytes). At runtime it reads `state.dev.services` to wire characteristics automatically:
@@ -163,9 +181,9 @@ Pure functions — no persistent state, not a model, not accessed via `ctx.model
   - RSSI: −65 dBm
   - Labels resolved via `GATT_LABELS`; unknown UUIDs fall back to the raw UUID string.
 
-### 9. File Watcher (`src/watcher.ts`)
+### 10. File Watcher (`src/watcher.ts`)
 
-Started in `onStart` via `startWatcher(dir, store)` using **chokidar**:
+Started per-namespace (in `Namespaces.create`) via `startWatcher(dir, store)` using **chokidar**:
 
 - **Initial scan** (synchronous): walks `<dir>/<category>/` subdirectories that contain a `gatt-profile.json`. For each `<MAC>.js` file found, calls `addDevice` which reads the profile into `initDeviceState`, sets `state.dev.id`, and registers the entry in the store.
 - **Live watching**: after startup, chokidar watches for:
@@ -175,17 +193,17 @@ Started in `onStart` via `startWatcher(dir, store)` using **chokidar**:
 
 Device IDs must match the pattern `[0-9a-f]{2}(-[0-9a-f]{2}){5}` (MAC address with dashes). Files not matching this pattern are ignored.
 
-### 10. `GET /devices` (`src/controllers/devices.ts`)
+### 11. `GET /ns/:token/devices` (`src/controllers/devices.ts`)
 
-For each entry in the store, runs `runDeviceLogic` with `{ kind: "advertise" }` and applies the result via `applyCommands`. The resulting `state.dev` is the advertising packet. A default `rssi: -65` is injected if the device logic does not set one. Returns the array of dev objects as JSON.
+Reads the namespace from the stash. For each entry in the namespace's store, runs `runDeviceLogic` with `{ kind: "advertise" }` and applies the result via `applyCommands`. The resulting `state.dev` is the advertising packet. A default `rssi: -65` is injected if the device logic does not set one. Returns the array of dev objects as JSON.
 
 This endpoint is polled by the app-side mock (`ble-faker/mock`) on scan start and every 5 seconds while scanning.
 
-> **Note:** `GET /devices` does **not** persist the advertise result back to `entry.state`. The `advertise` event is stateless — `state.dev` is reset from the stored entry on each call. Use `state.vars` for values that must survive across calls.
+> **Note:** `GET /ns/:token/devices` does **not** persist the advertise result back to `entry.state`. The `advertise` event is stateless — `state.dev` is reset from the stored entry on each call. Use `state.vars` for values that must survive across calls.
 
-### 11. BLE Bridge (`src/controllers/ble-bridge.ts`)
+### 12. BLE Bridge (`src/controllers/ble-bridge.ts`)
 
-`WebSocket /bridge/:id` — opened by the app-side mock immediately after `connectToDevice` succeeds.
+`WebSocket /ns/:token/bridge/:id` — opened by the app-side mock immediately after `connectToDevice` succeeds.
 
 On each new connection:
 
@@ -199,17 +217,29 @@ On WebSocket close: tick timer and event listeners are removed.
 
 The server sends characteristic updates **only for changed values** (diff against `entry.state.chars`), then writes the new state back to `entry.state`.
 
-### 12. Browser Bridge (`src/controllers/browser-bridge.ts`)
+### 13. Browser Dashboard (`src/controllers/namespaces.ts`, `views/`)
 
-`WebSocket /browser/:id` — opened by the browser dashboard for a specific device.
+`GET /ns/:token` — renders a live HTML dashboard for the namespace.
 
-- On connect: emits the current UI definition to the browser.
-- Forwards `set` messages (produced by `{ set: { field: value } }` commands) as real-time output field updates.
-- Receives input form submits from the browser and fires `input` events on `entry.events`.
+- **`namespaces#show`** reads all devices from the namespace store, generates a per-device absolute WebSocket URL (via `ctx.urlFor('connect_browser_bridge', { absolute: true })`), and renders `views/namespaces/show.html.tmpl`.
+- The page lists each device by name and MAC address. On load, client-side JavaScript opens a WebSocket to `GET /ns/:token/browser/:id` for each device and renders its `in`/`out` controls when the first `ui` message arrives.
+- A green status dot shows whether each device's WebSocket is live.
+- Page-specific styles are injected into `<head>` via a `<{headBlock}>` content block; the initialisation script runs at the bottom of `<body>` so DOM elements are available.
+- `views/layouts/default.html.tmpl` provides shared HTML boilerplate (title, base styles) for both this and the root index view.
 
-### 13. App-Side Mock (`src/mock.ts`, `ble-faker/mock`)
+#### Browser Bridge (`src/controllers/browser-bridge.ts`)
+
+`WebSocket /ns/:token/browser/:id` — opened by the dashboard for a specific device.
+
+- On connect: emits the current UI definition to the browser as `{ type: "ui", ui }`.
+- Forwards `set` messages (produced by `{ set: { field: value } }` commands) as `{ type: "set", fieldName, value }` real-time output field updates.
+- Receives `{ type: "input", id, payload }` from the browser and fires `input` events on `entry.events`.
+
+### 14. App-Side Mock (`src/mock.ts`, `ble-faker/mock`)
 
 Exposed as the `./mock` package subpath (`dist/mock.js`). Acts as a drop-in replacement for `react-native-ble-plx` via Metro's module resolution hook.
+
+`react-native-ble-plx-mock` is **bundled into** `dist/mock.js` (not an external dependency). `react-native` is externalized and resolved from the app's own package at bundle time.
 
 #### Metro configuration (app side)
 
@@ -217,37 +247,79 @@ Exposed as the `./mock` package subpath (`dist/mock.js`). Acts as a drop-in repl
 // metro.config.js
 const bleMock = process.env.BLE_MOCK === "true";
 if (bleMock) {
+  // ── Configuration ──────────────────────────────────────────────────
+  const stateFile = path.join(os.homedir(), ".ble-faker-server.json");
+  const { port: bleFakerPort } = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+  const BLE_FAKER_DIR = path.join(__dirname, "mocks"); // parent of category dirs
+  const BLE_FAKER_LABEL = "My App";
+  // ───────────────────────────────────────────────────────────────────
+
   const bleFakerDir = fs.realpathSync(
     path.join(__dirname, "node_modules/ble-faker"),
   );
+  const mockPath = path.join(bleFakerDir, "dist/mock.js");
+
   config.watchFolders = [bleFakerDir];
+
+  // Serve config to the RN bundle via Metro's own HTTP server
+  config.server = {
+    ...config.server,
+    enhanceMiddleware: (middleware) => (req, res, next) => {
+      if (req.url === "/ble-faker-config") {
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            port: bleFakerPort,
+            dir: BLE_FAKER_DIR,
+            label: BLE_FAKER_LABEL,
+          }),
+        );
+        return;
+      }
+      middleware(req, res, next);
+    },
+  };
+
   config.resolver.resolveRequest = (context, moduleName, platform) => {
     if (moduleName === "react-native-ble-plx") {
-      return {
-        filePath: path.join(bleFakerDir, "dist/mock.js"),
-        type: "sourceFile",
-      };
+      return { filePath: mockPath, type: "sourceFile" };
+    }
+    // bare imports from ble-faker must resolve from the app's node_modules
+    if (
+      context.originModulePath.startsWith(bleFakerDir) &&
+      !moduleName.startsWith(".")
+    ) {
+      return context.resolveRequest(
+        { ...context, originModulePath: path.join(__dirname, "package.json") },
+        moduleName,
+        platform,
+      );
     }
     return context.resolveRequest(context, moduleName, platform);
   };
 }
 ```
 
-`fs.realpathSync` is required because `node_modules/ble-faker` may be a symlink (e.g. `pnpm link` or `file:` dep); Metro needs the real path in `watchFolders`.
+Key points:
+
+- `resolveRequest` is used (not `extraNodeModules`) — Metro requires file-level remapping for specific file targets.
+- `fs.realpathSync` is required because `node_modules/ble-faker` may be a symlink; Metro needs the real path in `watchFolders`.
+- **Port is auto-detected** from the running server's state file — no hardcoding needed.
+- The `enhanceMiddleware` route serves configuration to the RN bundle; it is set up at Metro startup, so **Metro must be restarted** (not just reloaded) when metro.config.js changes.
+- `BLE_FAKER_DIR` must point to the **parent** of category directories (the watcher scans one level down for subdirs containing `gatt-profile.json`).
 
 #### `BleManager` subclass
 
-Re-exports the full surface of `react-native-ble-plx-mock` and replaces `BleManager` with a subclass:
+Re-exports the full surface of `react-native-ble-plx-mock` and replaces `BleManager` with a subclass. The constructor takes no arguments — all configuration is fetched lazily on first scan start:
 
 ```ts
 export class BleManager extends MockManager {
-  constructor(options: { bleFakerPort?: number } = {}) {
+  constructor() {
     super();
-    // Derive server URL from Expo dev server host + configured port
-    this._url = deriveServerUrl(options.bleFakerPort ?? 3000);
-
     this.onStartScan(() => {
-      /* poll immediately, then every 5s */
+      void this._mount().then(() => {
+        /* poll */
+      });
     });
     this.onStopScan(() => {
       /* clear interval */
@@ -256,28 +328,36 @@ export class BleManager extends MockManager {
 }
 ```
 
+#### Mount flow
+
+On first `onStartScan`:
+
+1. Parse `NativeModules.SourceCode.scriptURL` to obtain the Metro server's origin (e.g. `http://192.168.1.100:8081`).
+2. `GET <metroOrigin>/ble-faker-config` — receives `{ port, dir, label }`.
+3. Construct `serverBase = http://<host>:<port>` using the same host as Metro (ble-faker runs on the same machine).
+4. `POST <serverBase>/mount { dir, label }` — creates a namespace; receives `{ devicesUrl, bridgeUrl }`.
+
+`_mountPromise` caches the result — repeated scan start/stop cycles reuse the same namespace.
+
 #### Polling loop (scanning)
 
-Runs inside the RN app. Uses only `fetch` and `expo-constants` (no Node.js built-ins):
-
-1. Derive server URL from `Constants.expoConfig.hostUri` (Expo dev server host) + port.
-2. `GET /devices` — if unreachable, treat as empty list.
-3. `clearMockDevices()` unconditionally.
-4. `addMockDevice(d)` for each device. Also builds a `charUUID → serviceUUID` lookup map for the WS bridge.
+1. `GET devicesUrl` — if unreachable, treat as empty list.
+2. `clearMockDevices()` unconditionally.
+3. `addMockDevice(d)` for each device with a valid `id` string. Also builds a `charUUID → serviceUUID` lookup map for the WS bridge.
 
 An `inProgress` flag prevents overlapping polls.
 
 #### WebSocket bridge (per connected device)
 
-Opened immediately after `connectToDevice` succeeds (`/bridge/:id`), closed on `cancelDeviceConnection`.
+Opened immediately after `connectToDevice` succeeds (`/ns/:token/bridge/:id`), closed on `cancelDeviceConnection`.
 
 - **App → server** (`writeCharacteristicWith[out]ResponseForDevice`): forwards `{ uuid, payload }` over the WS. A write queue buffers messages sent while the WS is still in the `CONNECTING` state; they are flushed on `open`.
 - **Server → app** (`onmessage`): receives `{ type: "char", uuid, value }` and calls `setCharacteristicValue` to update the mock characteristic, triggering any registered monitors.
 - **Reconnect safety**: `_openBridge` always calls `_closeBridge` first to prevent stale WS instances. The `onclose` handler guards with an identity check (`ws === current`) so a closing stale socket cannot clobber a newer one.
 
-### 14. Tests
+### 15. Tests
 
-49 tests across 7 files, run in parallel via `node --test test/**/*.test.ts`:
+56 tests across 9 files, run in parallel via `node --test test/**/*.test.ts`:
 
 | file                            | what it covers                                                                                                                             |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -285,19 +365,25 @@ Opened immediately after `connectToDevice` succeeds (`/bridge/:id`), closed on `
 | `test/bridges.test.ts`          | `ble-bridge` and `browser-bridge` WebSocket controllers — 4 tests                                                                          |
 | `test/default-device.test.ts`   | `DEFAULT_DEVICE_CODE` via `runDeviceLogic` — 8 tests covering start/reload/input/unknown events and edge cases                             |
 | `test/device-logic.test.ts`     | `runDeviceLogic` sandbox — 14 tests covering core behaviour, utils, console capture, state isolation, error handling, and sandbox security |
-| `test/devices.test.ts`          | `GET /devices` endpoint — 6 tests covering empty store, device with id, serviceUUIDs, isConnectable, rssi fallback, and multiple devices   |
-| `test/server.test.ts`           | `bleMockServer` lifecycle — spawns a real server, verifies state file round-trip, stops it — 1 test                                        |
+| `test/devices.test.ts`          | `GET /ns/:token/devices` endpoint — 6 tests                                                                                                |
+| `test/namespaces.test.ts`       | `POST /mount` and `DELETE /ns/:token` — 4 tests                                                                                            |
+| `test/root.test.ts`             | `GET /` namespace index page — 3 tests                                                                                                     |
+| `test/server.test.ts`           | server lifecycle — spawns a real server, verifies state file round-trip and `stop` subcommand — 2 tests                                    |
 | `test/state-engine.test.ts`     | `applyCommands` (10 tests) and `initDeviceState` (1 test)                                                                                  |
 
 `test/fixtures/heart-rate-monitors/` contains the shared device fixture used across multiple suites.
 
-### 15. CI
+### 16. CI
 
 Three-platform matrix (ubuntu, macos, windows) via `.github/workflows/ci.yml`, running `pnpm build:test` on Node 23. Automatic release PR management via `release-please`. Typical run times: Ubuntu fastest, macOS ~26s, Windows ~46s (Windows overhead is inherent — NTFS + Defender — not test execution time).
 
 ---
 
 ## Planned
+
+### `ble-faker/metro` helper
+
+A CJS module (`dist/metro.js`) that packages the full metro.config.js integration into a single `withBleFaker(config, { dir, label })` call — reads the state file, adds `enhanceMiddleware`, configures `resolveRequest` and `watchFolders`. Reduces app-side boilerplate to two lines.
 
 ### Heartbeat
 

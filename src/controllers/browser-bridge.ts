@@ -1,9 +1,11 @@
 import type { MojoContext } from "@mojojs/core";
+import type { Namespace } from "../models/namespaces.js";
 
 export default class BrowserBridgeController {
   async connect(ctx: MojoContext): Promise<void> {
+    const { store } = ctx.stash["ns"] as Namespace;
     const id = String(ctx.stash["id"] ?? "");
-    const entry = ctx.models.store.get(id);
+    const entry = store.get(id);
     if (entry === undefined) {
       await ctx.notFound();
       return;

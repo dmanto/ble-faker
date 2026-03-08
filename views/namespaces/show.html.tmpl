@@ -1,0 +1,121 @@
+% view.layout = 'default';
+<h1><%= ns.label %></h1>
+<p class="meta"><a href="<%= ctx.urlFor('index_root') %>">&larr; namespaces</a> &nbsp;&middot;&nbsp; <%= ns.dir %></p>
+
+% if (devices.length === 0) {
+  <p class="empty">No devices found. Add .js files to <%= ns.dir %>.</p>
+% } else {
+  <div class="devices">
+    % for (const device of devices) {
+      <div class="device" data-id="<%= device.id %>" data-ws="<%= device.wsUrl %>">
+        <h2><span class="status" id="status-<%= device.id %>"></span><span id="name-<%= device.id %>"><%= device.name %></span></h2>
+        <div class="device-id"><%= device.id %></div>
+        <div class="controls" id="controls-<%= device.id %>">
+          <span class="no-controls">connecting&hellip;</span>
+        </div>
+      </div>
+    % }
+  </div>
+% }
+
+<script>
+  function renderUi(container, ui, ws) {
+    container.innerHTML = '';
+    const ins = ui.ins ?? [];
+    const outs = ui.outs ?? [];
+    if (ins.length === 0 && outs.length === 0) {
+      container.innerHTML = '<span class="no-controls">no controls defined</span>';
+      return;
+    }
+    for (const ctrl of outs) {
+      const row = document.createElement('div');
+      row.className = 'out-row';
+      const label = document.createElement('span');
+      label.className = 'out-label';
+      label.textContent = ctrl.label + ':';
+      const value = document.createElement('span');
+      value.className = 'out-value';
+      value.dataset.out = ctrl.name;
+      row.append(label, value);
+      container.appendChild(row);
+    }
+    for (const ctrl of ins) {
+      const form = document.createElement('form');
+      form.className = 'in-form';
+      const label = document.createElement('label');
+      label.className = 'in-label';
+      label.textContent = ctrl.label + ':';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = ctrl.name;
+      const btn = document.createElement('button');
+      btn.type = 'submit';
+      btn.textContent = 'Send';
+      form.append(label, input, btn);
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        ws.send(JSON.stringify({ type: 'input', id: ctrl.name, payload: input.value }));
+        input.value = '';
+      });
+      container.appendChild(form);
+    }
+  }
+
+  document.querySelectorAll('.device').forEach((el) => {
+    const id = el.dataset.id;
+    const wsUrl = el.dataset.ws;
+    const controls = document.getElementById('controls-' + id);
+    const statusDot = document.getElementById('status-' + id);
+    let ws;
+
+    function connect() {
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        statusDot.classList.add('connected');
+      };
+
+      ws.onclose = () => {
+        statusDot.classList.remove('connected');
+        controls.innerHTML = '<span class="no-controls">disconnected — retrying&hellip;</span>';
+        setTimeout(connect, 2000);
+      };
+
+      ws.onerror = () => {};
+
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'ui') {
+          renderUi(controls, msg.ui, ws);
+        } else if (msg.type === 'set') {
+          const field = controls.querySelector('[data-out="' + msg.fieldName + '"]');
+          if (field) field.textContent = msg.value;
+        }
+      };
+    }
+
+    connect();
+  });
+</script>
+
+<{headBlock}>
+  <style>
+    .devices { display: flex; flex-direction: column; gap: 1.5rem; }
+    .device { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 1.25rem 1.5rem; }
+    .device h2 { margin: 0 0 0.2rem; font-size: 1rem; }
+    .device-id { color: #888; font-size: 0.8rem; margin-bottom: 1rem; }
+    .status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ccc; margin-right: 6px; vertical-align: middle; }
+    .status.connected { background: #22c55e; }
+    .controls { display: flex; flex-direction: column; gap: 0.75rem; }
+    .out-row { display: flex; align-items: baseline; gap: 0.5rem; }
+    .out-label { color: #555; }
+    .out-value { background: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; padding: 0.15rem 0.4rem; min-width: 6rem; }
+    .in-form { display: flex; align-items: center; gap: 0.5rem; }
+    .in-label { color: #555; }
+    .in-form input { font-family: monospace; font-size: 0.9rem; border: 1px solid #ccc; border-radius: 3px; padding: 0.2rem 0.4rem; width: 12rem; }
+    .in-form button { font-family: monospace; font-size: 0.9rem; background: #0070f3; color: #fff; border: none; border-radius: 3px; padding: 0.25rem 0.75rem; cursor: pointer; }
+    .in-form button:hover { background: #005cd1; }
+    .no-controls { color: #aaa; font-size: 0.85rem; }
+  </style>
+<{/headBlock}>
+% await ctx.contentFor('head', headBlock);

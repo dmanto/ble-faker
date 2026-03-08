@@ -1,0 +1,15 @@
+% view.layout = 'default';
+<h1>ble-faker namespaces</h1>
+% if (namespaces.length === 0) {
+  <p class="empty">No namespaces mounted yet. POST /mount to create one.</p>
+% } else {
+  <ul style="list-style:none;padding:0;">
+    % for (const ns of namespaces) {
+      <li style="margin:0.4rem 0;">
+        <a href="<%= ctx.urlFor('show_namespace', {values: {token: ns.token}}) %>"
+           title="<%= ns.token %>"><%= ns.label %></a>
+        <span class="empty">&mdash; <%= ns.dir %></span>
+      </li>
+    % }
+  </ul>
+% }

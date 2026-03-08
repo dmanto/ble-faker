@@ -2,13 +2,15 @@ import type { MojoContext } from "@mojojs/core";
 import { applyCommands } from "../state-engine.js";
 import { readDeviceCode } from "../read-device-code.js";
 import type { DeviceEvent } from "../plugins.js";
+import type { Namespace } from "../models/namespaces.js";
 
 const TICK_MS = 1000;
 
 export default class BleBridgeController {
   async connect(ctx: MojoContext): Promise<void> {
+    const { store } = ctx.stash["ns"] as Namespace;
     const id = String(ctx.stash["id"] ?? "");
-    const entry = ctx.models.store.get(id);
+    const entry = store.get(id);
     if (entry === undefined) {
       await ctx.notFound();
       return;

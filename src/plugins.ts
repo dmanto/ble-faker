@@ -16,6 +16,61 @@ export type DeviceEvent =
   | { kind: "notify"; uuid: string; payload: string }
   | { kind: "input"; id: string; payload: string };
 
+export function runDeviceLogic(
+  deviceCode: string,
+  currentState: object,
+  event: DeviceEvent,
+  timeout = 50,
+): DeviceLogicOutput {
+  const logs: DeviceLogEntry[] = [];
+  const capture =
+    (level: DeviceLogEntry["level"]) =>
+    (...args: unknown[]) =>
+      logs.push({ level, message: args.map(String).join(" ") });
+
+  const sandbox = {
+    process: undefined,
+    require: undefined,
+    Buffer,
+    Uint8Array,
+    DataView,
+    utils: {
+      toBase64: (arr: Uint8Array) => Buffer.from(arr).toString("base64"),
+      fromBase64: (str: string) => Buffer.from(str, "base64"),
+      packUint16: (val: number) => {
+        const b = Buffer.alloc(2);
+        b.writeUInt16LE(val);
+        return b.toString("base64");
+      },
+    },
+    state: JSON.parse(JSON.stringify(currentState)) as Record<string, unknown>,
+    event,
+    console: {
+      log: capture("log"),
+      warn: capture("warn"),
+      error: capture("error"),
+    },
+  };
+
+  const context = vm.createContext(sandbox);
+
+  try {
+    const cjsCode = deviceCode.replace("export default", "__export =");
+    const wrapped = `let __export;\n${cjsCode}\n__export`;
+    const fn = vm.runInContext(wrapped, context, { timeout }) as (
+      state: Record<string, unknown>,
+      event: DeviceEvent,
+    ) => unknown;
+    const raw = fn(sandbox.state, sandbox.event);
+    return { result: JSON.parse(JSON.stringify(raw)), logs };
+  } catch (err) {
+    const message =
+      err instanceof Error ? (err.stack ?? err.message) : String(err);
+    console.error("Device logic error:", message);
+    return { result: [], logs: [{ level: "error", message }] };
+  }
+}
+
 export function registerPlugins(app: MojoApp): void {
   app.addHelper(
     "calculateAdvertizingSize",
@@ -73,70 +128,19 @@ export function registerPlugins(app: MojoApp): void {
       currentState: Record<string, unknown>,
       event: DeviceEvent,
       timeout = 50,
-    ): DeviceLogicOutput => {
-      const logs: DeviceLogEntry[] = [];
-      const capture =
-        (level: DeviceLogEntry["level"]) =>
-        (...args: unknown[]) =>
-          logs.push({ level, message: args.map(String).join(" ") });
-
-      const sandbox = {
-        // Explicitly shadow Node.js globals that could otherwise leak through the prototype chain
-        process: undefined,
-        require: undefined,
-
-        // Standard binary tools available without imports
-        Buffer,
-        Uint8Array,
-        DataView,
-
-        // Convenience helpers
-        utils: {
-          toBase64: (arr: Uint8Array) => Buffer.from(arr).toString("base64"),
-          fromBase64: (str: string) => Buffer.from(str, "base64"),
-          packUint16: (val: number) => {
-            const b = Buffer.alloc(2);
-            b.writeUInt16LE(val);
-            return b.toString("base64");
-          },
-        },
-
-        // Deep-cloned so logic cannot mutate server state directly
-        state: JSON.parse(JSON.stringify(currentState)) as Record<
-          string,
-          unknown
-        >,
-        event,
-
-        // Captured console — forwarded to browser view via WebSocket (TODO)
-        console: {
-          log: capture("log"),
-          warn: capture("warn"),
-          error: capture("error"),
-        },
-      };
-
-      const context = vm.createContext(sandbox);
-
-      try {
-        // Strip `export default` so vm.Script (CommonJS) can evaluate the function
-        const cjsCode = deviceCode.replace("export default", "__export =");
-        const wrapped = `let __export;\n${cjsCode}\n__export`;
-        const fn = vm.runInContext(wrapped, context, { timeout }) as (
-          state: Record<string, unknown>,
-          event: DeviceEvent,
-        ) => unknown;
-        // JSON round-trip normalises vm-context objects/arrays into host objects,
-        // making the result safe to serialise and compare with deepEqual.
-        const raw = fn(sandbox.state, sandbox.event);
-        return { result: JSON.parse(JSON.stringify(raw)), logs };
-      } catch (err) {
-        // Use stack for line position info; line numbers are offset by 1 due to the `let __export;` prefix
-        const message =
-          err instanceof Error ? (err.stack ?? err.message) : String(err);
-        console.error("Device logic error:", message);
-        return { result: [], logs: [{ level: "error", message }] };
-      }
-    },
+    ): DeviceLogicOutput =>
+      runDeviceLogic(deviceCode, currentState, event, timeout),
   );
+}
+
+declare module "@mojojs/core" {
+  interface MojoContext {
+    calculateAdvertizingSize: (mockedDevice: Partial<Device>) => number;
+    runDeviceLogic: (
+      deviceCode: string,
+      currentState: object,
+      event: DeviceEvent,
+      timeout?: number,
+    ) => DeviceLogicOutput;
+  }
 }

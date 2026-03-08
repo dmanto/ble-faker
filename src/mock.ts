@@ -3,21 +3,19 @@ import type {
   MockDeviceConfig,
   ServiceConfig,
 } from "react-native-ble-plx-mock";
-import Constants from "expo-constants";
+import { NativeModules } from "react-native";
 
 export * from "react-native-ble-plx-mock";
 
 const POLL_INTERVAL_MS = 5000;
 
-function deriveServerUrl(port: number): string {
-  const hostUri = Constants.expoConfig?.hostUri ?? "localhost:8081";
-  const host = hostUri.split(":")[0] ?? "localhost";
-  return `http://${host}:${port}`;
-}
-
 export class BleManager extends MockManager {
-  private _url: string;
-  private _wsUrl: string;
+  private _serverBase: string | null = null;
+  private _dir: string | null = null;
+  private _label: string | null = null;
+  private _devicesUrl: string | null = null;
+  private _bridgeUrl: string | null = null;
+  private _mountPromise: Promise<void> | null = null;
   private _pollTimer: ReturnType<typeof setInterval> | null = null;
   private _inProgress = false;
   // deviceId → Map<charUUID, serviceUUID>  (both lowercase)
@@ -27,14 +25,16 @@ export class BleManager extends MockManager {
   // messages queued while WS is still CONNECTING
   private _bridgeQueue = new Map<string, string[]>();
 
-  constructor(options: { bleFakerPort?: number } = {}) {
+  constructor() {
     super();
-    this._url = deriveServerUrl(options.bleFakerPort ?? 3000);
-    this._wsUrl = this._url.replace(/^http/, "ws");
-
     this.onStartScan(() => {
-      void this._poll();
-      this._pollTimer = setInterval(() => void this._poll(), POLL_INTERVAL_MS);
+      void this._mount().then(() => {
+        void this._poll();
+        this._pollTimer = setInterval(
+          () => void this._poll(),
+          POLL_INTERVAL_MS,
+        );
+      });
     });
 
     this.onStopScan(() => {
@@ -45,13 +45,53 @@ export class BleManager extends MockManager {
     });
   }
 
+  private _metroOrigin(): string {
+    const scriptURL = (NativeModules.SourceCode as { scriptURL?: string })
+      ?.scriptURL;
+    if (!scriptURL) return "http://localhost:8081";
+    const url = new URL(scriptURL);
+    return url.origin;
+  }
+
+  private _mount(): Promise<void> {
+    if (this._mountPromise) return this._mountPromise;
+    this._mountPromise = (async () => {
+      const metroOrigin = this._metroOrigin();
+      const cfgRes = await fetch(`${metroOrigin}/ble-faker-config`);
+      if (!cfgRes.ok) throw new Error("ble-faker: missing metro config route");
+      const { port, dir, label } = (await cfgRes.json()) as {
+        port: number;
+        dir: string;
+        label: string;
+      };
+      const host = new URL(metroOrigin).hostname;
+      this._serverBase = `http://${host}:${port}`;
+      this._dir = dir;
+      this._label = label;
+
+      const res = await fetch(`${this._serverBase}/mount`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ dir, label }).toString(),
+      });
+      if (!res.ok) throw new Error(`ble-faker: mount failed (${res.status})`);
+      const { devicesUrl, bridgeUrl } = (await res.json()) as {
+        devicesUrl: string;
+        bridgeUrl: string;
+      };
+      this._devicesUrl = devicesUrl;
+      this._bridgeUrl = bridgeUrl;
+    })();
+    return this._mountPromise;
+  }
+
   private async _poll(): Promise<void> {
-    if (this._inProgress) return;
+    if (this._inProgress || !this._devicesUrl) return;
     this._inProgress = true;
     try {
       let devices: MockDeviceConfig[] = [];
       try {
-        const res = await fetch(`${this._url}/devices`);
+        const res = await fetch(this._devicesUrl);
         if (res.ok) {
           const raw = (await res.json()) as Partial<MockDeviceConfig>[];
           devices = raw.filter(
@@ -135,11 +175,12 @@ export class BleManager extends MockManager {
   }
 
   private _openBridge(deviceId: string): void {
+    if (!this._bridgeUrl) return;
     // Close any stale bridge from a previous session before opening a fresh one
     this._closeBridge(deviceId);
     const queue: string[] = [];
     this._bridgeQueue.set(deviceId, queue);
-    const ws = new WebSocket(`${this._wsUrl}/bridge/${deviceId}`);
+    const ws = new WebSocket(this._bridgeUrl.replace(":id", deviceId));
     ws.onopen = () => {
       this._bridgeQueue.delete(deviceId);
       for (const msg of queue) ws.send(msg);

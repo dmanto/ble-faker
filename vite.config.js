@@ -33,8 +33,7 @@ export default defineConfig({
         ...builtinModules,
         /^@mojojs/,
         /node:/,
-        "react-native-ble-plx-mock",
-        "expo-constants",
+        "react-native",
         "react-native-ble-plx",
       ],
       output: {

@@ -46,9 +46,3 @@ export class Store {
     return Array.from(this.devices.values());
   }
 }
-
-declare module "@mojojs/core" {
-  interface MojoModels {
-    store: Store;
-  }
-}

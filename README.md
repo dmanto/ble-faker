@@ -99,6 +99,10 @@ export default function (state, event) {
 npx ble-faker --dir ./mocks --port 58083
 ```
 
+### 4. Open the browser dashboard
+
+Navigate to `http://localhost:58083` to see the namespace index, then click through to a namespace dashboard. Each device shows its live UI controls — output fields update in real time as the tick event fires, and input fields let you send values to the device logic without touching the app.
+
 ---
 
 ## Device Logic
@@ -121,7 +125,7 @@ State is **read-only** inside the function — direct writes (`state.hr = 42`) a
 
 | `event.kind` | when                                                      |
 | ------------ | --------------------------------------------------------- |
-| `start`      | server/device initialization                              |
+| `start`      | every new BLE bridge connection (also warms up on load)   |
 | `tick`       | periodic timer                                            |
 | `reload`     | logic file changed on disk                                |
 | `advertise`  | server building the advertising packet                    |
