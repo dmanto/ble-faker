@@ -22,6 +22,7 @@ export default defineConfig({
         index: "src/index.ts",
         bin: "src/bin.ts",
         mock: "src/mock.ts",
+        "test-client": "src/test-client.ts",
         ...controllerEntries,
       },
       formats: ["es"],

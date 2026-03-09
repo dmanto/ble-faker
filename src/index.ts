@@ -27,6 +27,8 @@ nsRoutes
   .name("connect_browser_bridge")
   .to("browser-bridge#connect");
 nsRoutes.delete("/").name("remove_namespace").to("namespaces#remove");
+nsRoutes.post("/test/:id").name("post_test_input").to("test-bridge#input");
+nsRoutes.get("/test/:id").name("get_test_output").to("test-bridge#output");
 
 app.models.namespaces = new Namespaces();
 

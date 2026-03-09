@@ -21,6 +21,8 @@ The server is a Node.js application started via `npx ble-faker --port <port>` (s
 - `WebSocket /ns/:token/bridge/:id` — per-device BLE bridge for characteristic simulation (see §11).
 - `WebSocket /ns/:token/browser/:id` — browser dashboard real-time UI channel (see §12).
 - `DELETE /ns/:token` — destroys a namespace and its watcher.
+- `POST /ns/:token/test/:id` — _(planned)_ inject an input event into a device from test code (see §17).
+- `GET /ns/:token/test/:id` — _(planned)_ long-poll for a device output from test code (see §17).
 
 All `/ns/:token/*` routes are guarded by a `namespaces#load` under-action that resolves the token to a `Namespace` object in the stash, returning 404 if not found.
 
@@ -46,8 +48,10 @@ The server registers two helpers in `src/plugins.ts`:
 
 `src/index.ts` registers two lifecycle hooks:
 
-- **`onStart`** — writes `~/.ble-faker-server.json` containing `{ pid, url, port }` once the server is ready.
+- **`onStart`** — writes the state file containing `{ pid, url, port }` as soon as the app boots. Because `onStart` fires before the TCP port is actually bound, `url` is synthesised from `app.config.port` rather than read from `server.urls`.
 - **`onStop`** — deletes the state file on graceful SIGTERM shutdown.
+
+The default state file path is `~/.ble-faker-server.json`. The `BLE_FAKER_STATE` environment variable overrides it — used by the test suite to isolate each test's state file.
 
 Together with the `bin.ts` exit handlers, the state file is cleaned up for all termination scenarios except SIGKILL. Stale files from SIGKILL or hard crashes are detected on next startup via a PID liveness check (`process.kill(pid, 0)`).
 
@@ -158,7 +162,7 @@ Each `POST /mount` call creates an isolated **Namespace** — a pairing of a `St
 Defines the shared types and the in-memory device registry. One `Store` instance exists per namespace.
 
 - **`DeviceState`** — `{ dev, vars, chars, ui }` — the full runtime state for one device.
-- **`DeviceEntry`** — `{ id, categoryDir, jsFilePath, state, events }` — one registered device. The `events` field is a Node.js `EventEmitter` used to signal `reload`, `input`, and `remove` to active bridge connections.
+- **`DeviceEntry`** — `{ id, categoryDir, jsFilePath, state, events }` — one registered device. The `events` field is a Node.js `EventEmitter` used to signal `reload`, `input`, `set`, and `remove` to active bridge connections.
 - **`UiControl`** — `{ name, label }` — one browser input or output control.
 - **`Store`** — `Map<id, DeviceEntry>` with `add/get/set/remove/has/all` methods.
 - **`sanitizeDeviceId(raw)`** — normalises a MAC string to lowercase with dashes.
@@ -199,7 +203,7 @@ Reads the namespace from the stash. For each entry in the namespace's store, run
 
 This endpoint is polled by the app-side mock (`ble-faker/mock`) on scan start and every 5 seconds while scanning.
 
-> **Note:** `GET /ns/:token/devices` does **not** persist the advertise result back to `entry.state`. The `advertise` event is stateless — `state.dev` is reset from the stored entry on each call. Use `state.vars` for values that must survive across calls.
+The result of `applyCommands` is written back to `entry.state`, so `{ vars: … }` and `{ name, rssi, … }` commands returned from `advertise` are persisted and available on the next call.
 
 ### 12. BLE Bridge (`src/controllers/ble-bridge.ts`)
 
@@ -210,7 +214,7 @@ On each new connection:
 1. **`start`** event fires — device logic initialises characteristics and UI. Any characteristic diff (new value ≠ stored value) is sent to the app immediately as `{ type: "char", uuid, value }`.
 2. **Tick timer** fires every 1 second — drives `tick` events; diffs are forwarded to the app.
 3. **`reload`** event — wired to `entry.events`; fires when the device `.js` file changes on disk.
-4. **`input`** event — wired to `entry.events`; fires when the browser UI submits a form field.
+4. **`input`** event — wired to `entry.events`; fires when the browser UI submits a form field or when the test HTTP endpoint injects an input (see §17).
 5. **Incoming messages** (app → server): `{ uuid, payload }` objects are forwarded as `notify` events. The result is applied and diffs are sent back to the app.
 
 On WebSocket close: tick timer and event listeners are removed.
@@ -232,7 +236,7 @@ The server sends characteristic updates **only for changed values** (diff agains
 `WebSocket /ns/:token/browser/:id` — opened by the dashboard for a specific device.
 
 - On connect: emits the current UI definition to the browser as `{ type: "ui", ui }`.
-- Forwards `set` messages (produced by `{ set: { field: value } }` commands) as `{ type: "set", fieldName, value }` real-time output field updates.
+- Subscribes to `set` events on `entry.events` and forwards them to the browser as `{ type: "set", fieldName, value }` real-time output field updates.
 - Receives `{ type: "input", id, payload }` from the browser and fires `input` events on `entry.events`.
 
 ### 14. App-Side Mock (`src/mock.ts`, `ble-faker/mock`)
@@ -380,6 +384,83 @@ Three-platform matrix (ubuntu, macos, windows) via `.github/workflows/ci.yml`, r
 ---
 
 ## Planned
+
+### 17. Test Control HTTP API (`src/controllers/test-bridge.ts`)
+
+Two HTTP endpoints that complement the WebSocket channels with a stateless, scriptable interface for automated tests (Detox, node:test, etc.).
+
+#### `POST /ns/:token/test/:id`
+
+Injects an `input` event into the device identified by `:id` (MAC address). Request body: `{ name: string, payload: string }`, where `name` matches an entry from the device's `in` definitions and `payload` is the string value to submit.
+
+Internally this fires the same `input` event on `entry.events` that the browser-bridge fires on WS form submit. If a ble-bridge WebSocket is connected, device logic runs immediately and any characteristic diffs are pushed to the app. Returns `204 No Content` on success, `404` if the namespace or device is not found.
+
+#### `GET /ns/:token/test/:id?name=<field>&expected=<pattern>&timeout=<ms>`
+
+Long-polls until the device emits a `{ set: { <name>: value } }` output where `value` matches `expected` (a regex pattern, URL-encoded), or until `timeout` milliseconds elapse (default: 5000).
+
+The handler subscribes to `set` events on `entry.events` for the duration of the request — no polling, purely push-triggered. Returns `{ name, value }` on match, `408 Request Timeout` if the timeout expires without a match.
+
+> **Important:** the GET must be issued *before* the action that triggers the output, since events that fire while no subscriber is waiting are silently missed (no buffering).
+
+#### Shared input handler
+
+Both the browser-bridge WS handler and the POST endpoint call the same internal `handleInput(entry, name, payload)` helper so input-handling logic is not duplicated across transports.
+
+#### Discoverability
+
+`GET /ns/:token/devices` includes a per-device `testUrl` field (absolute HTTP URL: `http://host/ns/TOKEN/test/DEVICE_ID`) alongside the existing advertising fields. It also includes a per-device `bridgeUrl` (fully resolved, no `:id` placeholder), making this endpoint the canonical source of per-device URLs. Test code never constructs URLs by hand — that is handled by `BleTestClient` (see §18).
+
+---
+
+### 18. `ble-faker/test` — Test Client (`src/test-client.ts`)
+
+A `ble-faker/test` subpath export that gives test code a clean, URL-free API for controlling mock devices. Designed for use in Detox E2E tests and any Node.js test runner.
+
+#### `BleTestClient`
+
+```ts
+import { BleTestClient } from "ble-faker/test";
+```
+
+- **`BleTestClient.connect()`** — reads the state file (respecting `BLE_FAKER_STATE`) to locate the running server. Returns a `BleTestClient` instance.
+- **`client.mount({ dir, label })`** — calls `POST /mount`, then `GET /devices` to discover per-device URLs. Returns a `BleNamespace`.
+- **`client.unmount(ns)`** — calls `DELETE /ns/:token` and disposes the namespace.
+
+#### `BleNamespace`
+
+- **`ns.device(id)`** — returns a `BleDevice` handle for the device with the given MAC address. The `testUrl` is resolved from the devices response; the developer never constructs URLs manually. Throws if the device is not found in the namespace.
+- **`ns.refresh()`** — re-fetches `GET /devices` to pick up newly added devices.
+
+#### `BleDevice`
+
+- **`device.input(name, payload)`** — `POST testUrl` with `{ name, payload }`. Triggers an `input` event in the device logic.
+- **`device.waitForOutput(name, expected, timeout?)`** — long-poll `GET testUrl?name=…&expected=…&timeout=…`. Resolves with the matched string value; rejects on timeout (default 5 s).
+
+#### Developer experience
+
+The only identifier a developer needs to know is the device MAC address — which they already know, because it is the filename of the device's `.js` logic file:
+
+```ts
+// test/heart-rate.test.ts
+import { BleTestClient } from "ble-faker/test";
+
+const client = await BleTestClient.connect();
+const ns = await client.mount({ dir: "./mocks", label: "e2e" });
+const device = ns.device("aa-bb-cc-dd-ee-ff");
+
+// Subscribe to output BEFORE triggering the input that produces it.
+const outputPromise = device.waitForOutput("current", /^1[0-9]{2}$/, 3000);
+await device.input("target", "120");
+
+assert.match(await outputPromise, /^1[0-9]{2}$/);
+
+await client.unmount(ns);
+```
+
+All URL construction, state file reading, and HTTP mechanics are internal to `BleTestClient`. If server URL structure changes, only the client implementation changes — test files are unaffected.
+
+---
 
 ### `ble-faker/metro` helper
 
