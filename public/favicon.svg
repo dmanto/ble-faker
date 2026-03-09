@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Dark navy background -->
+  <rect width="32" height="32" rx="7" fill="#0c1220"/>
+  <!-- Bluetooth rune in cyan: spine + upper-right chevron + lower-right chevron -->
+  <g fill="none" stroke="#22d3ee" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="16" y1="4" x2="16" y2="28"/>
+    <polyline points="16,4 23,10 16,16"/>
+    <polyline points="16,28 23,22 16,16"/>
+  </g>
+  <!-- Injection dot: signals the "faker" — something is being injected at the core -->
+  <circle cx="16" cy="16" r="2.8" fill="#fb7185"/>
+</svg>
