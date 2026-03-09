@@ -32,6 +32,10 @@ if (args[0] === "stop") {
       spawn("taskkill", ["/F", "/T", "/PID", String(state.pid)], {
         stdio: "ignore",
       });
+      // taskkill /F force-kills without running exit handlers, so clean up here.
+      try {
+        fs.unlinkSync(STATE_FILE);
+      } catch {}
     } else {
       process.kill(state.pid, "SIGTERM");
     }
