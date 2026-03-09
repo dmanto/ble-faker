@@ -36,6 +36,7 @@ export default defineConfig({
         /node:/,
         "react-native",
         "react-native-ble-plx",
+        "expo-constants",
       ],
       output: {
         banner: (chunk) =>

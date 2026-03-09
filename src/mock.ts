@@ -35,13 +35,17 @@ export class BleManager extends MockManager {
   constructor() {
     super();
     this.onStartScan(() => {
-      void this._mount().then(() => {
-        void this._poll();
-        this._pollTimer = setInterval(
-          () => void this._poll(),
-          POLL_INTERVAL_MS,
-        );
-      });
+      void this._mount()
+        .then(() => {
+          void this._poll();
+          this._pollTimer = setInterval(
+            () => void this._poll(),
+            POLL_INTERVAL_MS,
+          );
+        })
+        .catch((err: unknown) => {
+          console.error("[ble-faker] mount failed:", err);
+        });
     });
 
     this.onStopScan(() => {
@@ -52,18 +56,30 @@ export class BleManager extends MockManager {
     });
   }
 
-  private _metroOrigin(): string {
+  private async _metroOrigin(): Promise<string> {
+    // Standard React Native: Metro bundle URL exposed via NativeModules.SourceCode
     const scriptURL = (NativeModules.SourceCode as { scriptURL?: string })
       ?.scriptURL;
-    if (!scriptURL) return "http://localhost:8081";
-    const url = new URL(scriptURL);
-    return url.origin;
+    if (scriptURL) {
+      try {
+        return new URL(scriptURL).origin;
+      } catch {}
+    }
+    // Expo managed workflow: host available via expo-constants
+    try {
+      const { default: Constants } = await import("expo-constants");
+      const hostUri =
+        Constants.expoConfig?.hostUri ?? Constants.manifest?.debuggerHost;
+      if (hostUri) return `http://${hostUri}`;
+    } catch {}
+    return "http://localhost:8081";
   }
 
   private _mount(): Promise<void> {
     if (this._mountPromise) return this._mountPromise;
-    this._mountPromise = (async () => {
-      const metroOrigin = this._metroOrigin();
+    const p = (async () => {
+      const metroOrigin = await this._metroOrigin();
+      console.log("[ble-faker] connecting to metro at", metroOrigin);
       const cfgRes = await fetch(`${metroOrigin}/ble-faker-config`);
       if (!cfgRes.ok) throw new Error("ble-faker: missing metro config route");
       const { port, dir, label } = (await cfgRes.json()) as {
@@ -89,6 +105,10 @@ export class BleManager extends MockManager {
       this._devicesUrl = devicesUrl;
       this._bridgeUrl = bridgeUrl;
     })();
+    this._mountPromise = p.catch((err: unknown) => {
+      this._mountPromise = null; // allow retry on next scan
+      throw err;
+    });
     return this._mountPromise;
   }
 
