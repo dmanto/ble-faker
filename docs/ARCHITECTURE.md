@@ -21,8 +21,8 @@ The server is a Node.js application started via `npx ble-faker --port <port>` (s
 - `WebSocket /ns/:token/bridge/:id` — per-device BLE bridge for characteristic simulation (see §11).
 - `WebSocket /ns/:token/browser/:id` — browser dashboard real-time UI channel (see §12).
 - `DELETE /ns/:token` — destroys a namespace and its watcher.
-- `POST /ns/:token/test/:id` — _(planned)_ inject an input event into a device from test code (see §17).
-- `GET /ns/:token/test/:id` — _(planned)_ long-poll for a device output from test code (see §17).
+- `POST /ns/:token/test/:id` — inject an input event into a device from test code (see §17).
+- `GET /ns/:token/test/:id` — long-poll for a device output from test code (see §17).
 
 All `/ns/:token/*` routes are guarded by a `namespaces#load` under-action that resolves the token to a `Namespace` object in the stash, returning 404 if not found.
 
@@ -381,10 +381,6 @@ Opened immediately after `connectToDevice` succeeds (`/ns/:token/bridge/:id`), c
 
 Three-platform matrix (ubuntu, macos, windows) via `.github/workflows/ci.yml`, running `pnpm build:test` on Node 23. Automatic release PR management via `release-please`. Typical run times: Ubuntu fastest, macOS ~26s, Windows ~46s (Windows overhead is inherent — NTFS + Defender — not test execution time).
 
----
-
-## Planned
-
 ### 17. Test Control HTTP API (`src/controllers/test-bridge.ts`)
 
 Two HTTP endpoints that complement the WebSocket channels with a stateless, scriptable interface for automated tests (Detox, node:test, etc.).
@@ -461,6 +457,8 @@ await client.unmount(ns);
 All URL construction, state file reading, and HTTP mechanics are internal to `BleTestClient`. If server URL structure changes, only the client implementation changes — test files are unaffected.
 
 ---
+
+## Planned
 
 ### `ble-faker/metro` helper
 
