@@ -2,7 +2,7 @@
 <html>
   <head>
     <title>ble-faker<% if (typeof title !== 'undefined') { %> — <%= title %><% } %></title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="<%= ctx.urlForFile('favicon.svg') %>">
     <%== ctx.content.head ?? '' %>
     <style>
       *, *::before, *::after { box-sizing: border-box; }
