@@ -3,7 +3,12 @@ import type {
   MockDeviceConfig,
   ServiceConfig,
 } from "react-native-ble-plx-mock";
-import { NativeModules } from "react-native";
+import { NativeModules, Platform } from "react-native";
+
+// Augment the minimal react-native stub to include Platform.
+declare module "react-native" {
+  const Platform: { OS: string };
+}
 
 export * from "react-native-ble-plx-mock";
 
@@ -24,6 +29,8 @@ export class BleManager extends MockManager {
   private _bridgeWs = new Map<string, WebSocket>();
   // messages queued while WS is still CONNECTING
   private _bridgeQueue = new Map<string, string[]>();
+  // advertisedId (platform-specific) → server-side MAC used for bridge routing
+  private _advertisedToMac = new Map<string, string>();
 
   constructor() {
     super();
@@ -102,16 +109,19 @@ export class BleManager extends MockManager {
         // server unreachable — treat as empty list
       }
       this.clearMockDevices();
+      this._advertisedToMac.clear();
       for (const d of devices) {
-        this.addMockDevice(d);
-        // Build char→service lookup so WS messages can find the right service UUID
+        const advertisedId = this._toAdvertisedId(d.id);
+        this._advertisedToMac.set(advertisedId, d.id);
+        this.addMockDevice({ ...d, id: advertisedId });
+        // Build char→service lookup keyed by advertisedId
         const map = new Map<string, string>();
         for (const svc of (d.services ?? []) as ServiceConfig[]) {
           for (const char of svc.characteristics ?? []) {
             map.set(char.uuid.toLowerCase(), svc.uuid.toLowerCase());
           }
         }
-        this._charServiceMap.set(d.id, map);
+        this._charServiceMap.set(advertisedId, map);
       }
     } finally {
       this._inProgress = false;
@@ -174,13 +184,29 @@ export class BleManager extends MockManager {
     this._bridgeWs.get(deviceId)?.send(json);
   }
 
+  // Translate the server-side normalized MAC to the platform-appropriate format.
+  // Android real devices use AA:BB:CC:DD:EE:FF; iOS uses a CoreBluetooth UUID.
+  // The server always routes by MAC — _advertisedToMac provides the reverse mapping.
+  private _toAdvertisedId(mac: string): string {
+    if (Platform.OS === "ios") {
+      // Deterministic UUID derived from MAC so the format matches real iOS behaviour.
+      // Real CoreBluetooth UUIDs are opaque, but this is stable and UUID-shaped.
+      const hex = mac.replace(/-/g, "");
+      return `00000000-0000-4000-8000-${hex}`;
+    }
+    // Android: uppercase with colons — matches real react-native-ble-plx output.
+    return mac.replace(/-/g, ":").toUpperCase();
+  }
+
   private _openBridge(deviceId: string): void {
     if (!this._bridgeUrl) return;
     // Close any stale bridge from a previous session before opening a fresh one
     this._closeBridge(deviceId);
     const queue: string[] = [];
     this._bridgeQueue.set(deviceId, queue);
-    const ws = new WebSocket(this._bridgeUrl.replace(":id", deviceId));
+    // Bridge URL uses the server-side MAC, not the advertised (platform-specific) ID.
+    const mac = this._advertisedToMac.get(deviceId) ?? deviceId;
+    const ws = new WebSocket(this._bridgeUrl.replace(":id", mac));
     ws.onopen = () => {
       this._bridgeQueue.delete(deviceId);
       for (const msg of queue) ws.send(msg);
