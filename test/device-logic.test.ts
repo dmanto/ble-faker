@@ -181,4 +181,91 @@ test.suite("runDeviceLogic", async () => {
     );
     assert.deepEqual(result, [["ok", "yes"]]);
   });
+
+  // --- extended utils ---
+
+  await test("packUint8 / unpackUint8 round-trip", async () => {
+    const { result } = ctx.runDeviceLogic(
+      `export default function() {
+        const b64 = utils.packUint8(255);
+        return utils.unpackUint8(b64);
+      }`,
+      {},
+      { kind: "tick" },
+    );
+    assert.equal(result, 255);
+  });
+
+  await test("packInt8 / unpackInt8 round-trip with negative", async () => {
+    const { result } = ctx.runDeviceLogic(
+      `export default function() {
+        const b64 = utils.packInt8(-42);
+        return utils.unpackInt8(b64);
+      }`,
+      {},
+      { kind: "tick" },
+    );
+    assert.equal(result, -42);
+  });
+
+  await test("packInt16 / unpackInt16 round-trip with negative", async () => {
+    const { result } = ctx.runDeviceLogic(
+      `export default function() {
+        const b64 = utils.packInt16(-1000);
+        return utils.unpackInt16(b64);
+      }`,
+      {},
+      { kind: "tick" },
+    );
+    assert.equal(result, -1000);
+  });
+
+  await test("packUint32 / unpackUint32 round-trip", async () => {
+    const { result } = ctx.runDeviceLogic(
+      `export default function() {
+        const b64 = utils.packUint32(0xdeadbeef);
+        return utils.unpackUint32(b64);
+      }`,
+      {},
+      { kind: "tick" },
+    );
+    assert.equal(result, 0xdeadbeef);
+  });
+
+  await test("packFloat32 / unpackFloat32 round-trip", async () => {
+    const { result } = ctx.runDeviceLogic(
+      `export default function() {
+        const b64 = utils.packFloat32(3.14);
+        return utils.unpackFloat32(b64);
+      }`,
+      {},
+      { kind: "tick" },
+    );
+    assert.ok(Math.abs((result as number) - 3.14) < 0.001);
+  });
+
+  await test("TextEncoder encodes string to base64 via toBase64", async () => {
+    const { result } = ctx.runDeviceLogic(
+      `export default function() {
+        const enc = new TextEncoder();
+        return utils.toBase64(enc.encode("hello"));
+      }`,
+      {},
+      { kind: "tick" },
+    );
+    assert.equal(result, Buffer.from("hello").toString("base64"));
+  });
+
+  await test("TextDecoder decodes base64 payload to string", async () => {
+    const b64 = Buffer.from("world").toString("base64");
+    const { result } = ctx.runDeviceLogic(
+      `export default function(state) {
+        const dec = new TextDecoder();
+        return dec.decode(utils.fromBase64(state.b64));
+      }`,
+      { b64 },
+      { kind: "tick" },
+    );
+    assert.equal(result, "world");
+  });
 });

@@ -101,7 +101,7 @@ export default function (state, event) {
 - **Isolation**: runs in a `vm.createContext` sandbox. `process` and `require` are explicitly shadowed as `undefined` to prevent prototype-chain leakage from the Node.js host context.
 - **ESM compatibility**: strips `export default` before evaluation so `vm.Script` can handle it.
 - **Timeout**: configurable CPU limit (default 50ms) prevents runaway logic.
-- **Available globals** (no imports needed): `Buffer`, `Uint8Array`, `DataView`, and a `utils` object with `toBase64`, `fromBase64`, `packUint16`.
+- **Available globals** (no imports needed): `Buffer`, `Uint8Array`, `DataView`, `TextEncoder`, `TextDecoder`, and a `utils` object (see below). All standard ECMAScript built-ins (`Math`, `Date`, `JSON`, `Promise`, `Map`, `Set`, `RegExp`, `Error`, etc.) are also available — they come from the JS engine, not Node.js, so no explicit injection is needed.
 - **`state`**: deep-cloned read-only input from the server. Contains four server-managed namespaces:
   - `state.dev` — full GATT profile from `gatt-profile.json`, including the `services` array. This is the complete payload passed to `addMockDevice()` on the app side.
   - `state.vars` — device-local values persisted from previous `{ vars: … }` return instructions.
@@ -141,6 +141,27 @@ Each item in the returned array is discriminated by shape:
 | `{ disconnect: true }`            | `'disconnect' in item`| Triggers `simulateDeviceDisconnection` on the app-side mock; bridge WS is closed immediately after             |
 | `{ readError: { uuid: string } }` | `'readError' in item` | Triggers `simulateCharacteristicReadError` for the given UUID; error persists until cleared                    |
 | `{ clearReadError: { uuid } }`    | `'clearReadError' in item` | Clears a previously set read error for the given UUID                                                     |
+
+#### `utils` reference
+
+All pack/unpack helpers use **little-endian** byte order (standard for Bluetooth SIG GATT specs).
+
+| Function | Description |
+|---|---|
+| `toBase64(arr: Uint8Array)` | Encode a byte array to a base64 string |
+| `fromBase64(b64: string)` | Decode a base64 string to a `Buffer` |
+| `packUint8(n)` | 1-byte unsigned integer → base64 |
+| `packInt8(n)` | 1-byte signed integer → base64 |
+| `packUint16(n)` | 2-byte unsigned integer → base64 |
+| `packInt16(n)` | 2-byte signed integer → base64 |
+| `packUint32(n)` | 4-byte unsigned integer → base64 |
+| `packFloat32(n)` | 4-byte IEEE 754 float → base64 |
+| `unpackUint8(b64)` | base64 → 1-byte unsigned integer |
+| `unpackInt8(b64)` | base64 → 1-byte signed integer |
+| `unpackUint16(b64)` | base64 → 2-byte unsigned integer |
+| `unpackInt16(b64)` | base64 → 2-byte signed integer |
+| `unpackUint32(b64)` | base64 → 4-byte unsigned integer |
+| `unpackFloat32(b64)` | base64 → 4-byte IEEE 754 float |
 
 `in`/`out` definitions are typically returned from `start` and `reload` events. Error commands (`disconnect`, `readError`, `clearReadError`) are typically returned from `input` events — they are forwarded by the ble-bridge to the mock app via the WS channel (`bridgeMessages` in `ApplyResult`) and do not affect `state`.
 
@@ -374,14 +395,14 @@ Opened immediately after `connectToDevice` succeeds (`/ns/:token/bridge/:id`), c
 
 ### 15. Tests
 
-72 tests across 10 files, run in parallel via `node --test test/**/*.test.ts`:
+79 tests across 10 files, run in parallel via `node --test test/**/*.test.ts`:
 
 | file                            | what it covers                                                                                                                             |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `test/advertising-size.test.ts` | `calculateAdvertizingSize` helper (packet size arithmetic) — 5 tests                                                                       |
 | `test/bridges.test.ts`          | `ble-bridge` and `browser-bridge` WebSocket controllers — 6 tests                                                                          |
 | `test/default-device.test.ts`   | `DEFAULT_DEVICE_CODE` via `runDeviceLogic` — 8 tests covering start/reload/input/unknown events and edge cases                             |
-| `test/device-logic.test.ts`     | `runDeviceLogic` sandbox — 14 tests covering core behaviour, utils, console capture, state isolation, error handling, and sandbox security |
+| `test/device-logic.test.ts`     | `runDeviceLogic` sandbox — 21 tests covering core behaviour, utils, console capture, state isolation, error handling, and sandbox security |
 | `test/devices.test.ts`          | `GET /ns/:token/devices` endpoint — 6 tests                                                                                                |
 | `test/namespaces.test.ts`       | `POST /mount` and `DELETE /ns/:token` — 4 tests                                                                                            |
 | `test/root.test.ts`             | `GET /` namespace index page — 3 tests                                                                                                     |

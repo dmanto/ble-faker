@@ -34,14 +34,48 @@ export function runDeviceLogic(
     Buffer,
     Uint8Array,
     DataView,
+    TextEncoder,
+    TextDecoder,
     utils: {
       toBase64: (arr: Uint8Array) => Buffer.from(arr).toString("base64"),
       fromBase64: (str: string) => Buffer.from(str, "base64"),
+      // Pack helpers — all little-endian (standard for GATT/BLE SIG specs)
+      packUint8: (val: number) => Buffer.from([val & 0xff]).toString("base64"),
+      packInt8: (val: number) => {
+        const b = Buffer.alloc(1);
+        b.writeInt8(val);
+        return b.toString("base64");
+      },
       packUint16: (val: number) => {
         const b = Buffer.alloc(2);
         b.writeUInt16LE(val);
         return b.toString("base64");
       },
+      packInt16: (val: number) => {
+        const b = Buffer.alloc(2);
+        b.writeInt16LE(val);
+        return b.toString("base64");
+      },
+      packUint32: (val: number) => {
+        const b = Buffer.alloc(4);
+        b.writeUInt32LE(val);
+        return b.toString("base64");
+      },
+      packFloat32: (val: number) => {
+        const b = Buffer.alloc(4);
+        b.writeFloatLE(val);
+        return b.toString("base64");
+      },
+      // Unpack helpers — inverse of the pack functions above
+      unpackUint8: (b64: string) => Buffer.from(b64, "base64").readUInt8(0),
+      unpackInt8: (b64: string) => Buffer.from(b64, "base64").readInt8(0),
+      unpackUint16: (b64: string) =>
+        Buffer.from(b64, "base64").readUInt16LE(0),
+      unpackInt16: (b64: string) => Buffer.from(b64, "base64").readInt16LE(0),
+      unpackUint32: (b64: string) =>
+        Buffer.from(b64, "base64").readUInt32LE(0),
+      unpackFloat32: (b64: string) =>
+        Buffer.from(b64, "base64").readFloatLE(0),
     },
     state: JSON.parse(JSON.stringify(currentState)) as Record<string, unknown>,
     event,
