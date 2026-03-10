@@ -130,16 +130,19 @@ The `event` argument is a typed discriminated union (`DeviceEvent`):
 
 Each item in the returned array is discriminated by shape:
 
-| Item shape                      | Discriminant     | Effect                                                                                                         |
-| ------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
-| `['2A37', base64]`              | `Array.isArray`  | Updates a GATT characteristic value                                                                            |
-| `{ name, rssi, … }`             | plain object     | Patches `state.dev` (any `Partial<Device>` field)                                                              |
-| `{ in: [{ name, label }] }`     | `'in' in item`   | Defines browser input controls: one label + text field + submit button per entry; submit POSTs → `input` event |
-| `{ out: [{ name, label }] }`    | `'out' in item`  | Defines browser output display fields: one label + empty field per entry, `id` taken from `name`               |
-| `{ set: { fieldName: 'val' } }` | `'set' in item`  | Pushes string values to named output fields in the browser via WebSocket                                       |
-| `{ vars: { name: anyValue } }`  | `'vars' in item` | Persists any-typed values into `state.vars` for the next call — the only way to write device-local state       |
+| Item shape                        | Discriminant          | Effect                                                                                                         |
+| --------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `['2A37', base64]`                | `Array.isArray`       | Updates a GATT characteristic value                                                                            |
+| `{ name, rssi, … }`               | plain object fallback | Patches `state.dev` (any `Partial<Device>` field)                                                              |
+| `{ in: [{ name, label }] }`       | `'in' in item`        | Defines browser input controls: one label + text field + submit button per entry; submit POSTs → `input` event |
+| `{ out: [{ name, label }] }`      | `'out' in item`       | Defines browser output display fields: one label + empty field per entry, `id` taken from `name`               |
+| `{ set: { fieldName: 'val' } }`   | `'set' in item`       | Pushes string values to named output fields in the browser via WebSocket                                       |
+| `{ vars: { name: anyValue } }`    | `'vars' in item`      | Persists any-typed values into `state.vars` for the next call — the only way to write device-local state       |
+| `{ disconnect: true }`            | `'disconnect' in item`| Triggers `simulateDeviceDisconnection` on the app-side mock; bridge WS is closed immediately after             |
+| `{ readError: { uuid: string } }` | `'readError' in item` | Triggers `simulateCharacteristicReadError` for the given UUID; error persists until cleared                    |
+| `{ clearReadError: { uuid } }`    | `'clearReadError' in item` | Clears a previously set read error for the given UUID                                                     |
 
-`in`/`out` definitions are typically returned from `start` and `reload` events.
+`in`/`out` definitions are typically returned from `start` and `reload` events. Error commands (`disconnect`, `readError`, `clearReadError`) are typically returned from `input` events — they are forwarded by the ble-bridge to the mock app via the WS channel (`bridgeMessages` in `ApplyResult`) and do not affect `state`.
 
 > **Note:** `state` is read-only from the device code's perspective. Writing `state.hr = 42` inside the function will silently have no effect. Use `{ vars: { hr: 42 } }` instead.
 
@@ -173,7 +176,7 @@ Pure functions — no persistent state, not a model, not accessed via `ctx.model
 
 - **`emptyDeviceState()`** — returns a blank `DeviceState` with all fields empty.
 - **`initDeviceState(categoryDir)`** — reads `<categoryDir>/gatt-profile.json`, puts the full parsed object into `state.dev` (services included), and initialises `state.chars` with an empty string for every characteristic UUID.
-- **`applyCommands(result, current)`** — iterates the array returned by `runDeviceLogic`, applies each command to a shallow copy of `current`, and returns `{ state, wsMessages }`. Never mutates `current`. Invalid or unrecognised items are silently skipped.
+- **`applyCommands(result, current)`** — iterates the array returned by `runDeviceLogic`, applies each command to a shallow copy of `current`, and returns `{ state, wsMessages, bridgeMessages }`. Never mutates `current`. Invalid or unrecognised items are silently skipped. `bridgeMessages` contains messages to be forwarded to the app over the ble-bridge WS (e.g. `{ type: "disconnect" }`).
 
 ### 9. GATT Labels & Default Device (`src/gatt-labels.ts`, `src/default-device.ts`)
 
@@ -216,6 +219,8 @@ On each new connection:
 3. **`reload`** event — wired to `entry.events`; fires when the device `.js` file changes on disk.
 4. **`input`** event — wired to `entry.events`; fires when the browser UI submits a form field or when the test HTTP endpoint injects an input (see §17).
 5. **Incoming messages** (app → server): `{ uuid, payload }` objects are forwarded as `notify` events. The result is applied and diffs are sent back to the app.
+
+After processing each event, any `bridgeMessages` from `applyCommands` are sent to the app over the WS. If a `{ type: "disconnect" }` message is among them, the bridge WS is closed server-side immediately after sending it.
 
 On WebSocket close: tick timer and event listeners are removed.
 
@@ -336,12 +341,15 @@ export class BleManager extends MockManager {
 
 On first `onStartScan`:
 
-1. Parse `NativeModules.SourceCode.scriptURL` to obtain the Metro server's origin (e.g. `http://192.168.1.100:8081`).
+1. Detect the Metro server origin via `_metroOrigin()`, which tries in order:
+   - `NativeModules.SourceCode.scriptURL` — available in standard React Native (e.g. `http://192.168.1.100:8081/index.bundle?…`).
+   - `expo-constants` (`Constants.expoConfig?.hostUri` or `Constants.manifest?.debuggerHost`) — used in Expo managed workflow where `NativeModules.SourceCode` is unavailable.
+   - Falls back to `http://localhost:8081` (works on simulators/emulators where localhost resolves to the dev machine).
 2. `GET <metroOrigin>/ble-faker-config` — receives `{ port, dir, label }`.
 3. Construct `serverBase = http://<host>:<port>` using the same host as Metro (ble-faker runs on the same machine).
 4. `POST <serverBase>/mount { dir, label }` — creates a namespace; receives `{ devicesUrl, bridgeUrl }`.
 
-`_mountPromise` caches the result — repeated scan start/stop cycles reuse the same namespace.
+`_mountPromise` caches the result — repeated scan start/stop cycles reuse the same namespace. If the mount fails, `_mountPromise` is reset to `null` so the next scan start retries automatically. Errors are surfaced via `console.error("[ble-faker] mount failed: …")`.
 
 #### Polling loop (scanning)
 
@@ -356,24 +364,30 @@ An `inProgress` flag prevents overlapping polls.
 Opened immediately after `connectToDevice` succeeds (`/ns/:token/bridge/:id`), closed on `cancelDeviceConnection`.
 
 - **App → server** (`writeCharacteristicWith[out]ResponseForDevice`): forwards `{ uuid, payload }` over the WS. A write queue buffers messages sent while the WS is still in the `CONNECTING` state; they are flushed on `open`.
-- **Server → app** (`onmessage`): receives `{ type: "char", uuid, value }` and calls `setCharacteristicValue` to update the mock characteristic, triggering any registered monitors.
+- **Server → app** (`onmessage`): dispatches incoming messages by `type`:
+  - `"char"` — calls `setCharacteristicValue(deviceId, serviceUUID, uuid, value)`, triggering any registered monitors.
+  - `"disconnect"` — calls `simulateDeviceDisconnection(deviceId)`, firing the app's connection-loss callback.
+  - `"readError"` — calls `simulateCharacteristicReadError(deviceId, serviceUUID, charUUID, error)`. The error persists for all subsequent reads until cleared.
+  - `"clearReadError"` — calls `clearCharacteristicReadError(deviceId, serviceUUID, charUUID)`.
+  - `serviceUUID` is resolved from the `charUUID → serviceUUID` lookup map built during polling.
 - **Reconnect safety**: `_openBridge` always calls `_closeBridge` first to prevent stale WS instances. The `onclose` handler guards with an identity check (`ws === current`) so a closing stale socket cannot clobber a newer one.
 
 ### 15. Tests
 
-56 tests across 9 files, run in parallel via `node --test test/**/*.test.ts`:
+72 tests across 10 files, run in parallel via `node --test test/**/*.test.ts`:
 
 | file                            | what it covers                                                                                                                             |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `test/advertising-size.test.ts` | `calculateAdvertizingSize` helper (packet size arithmetic) — 5 tests                                                                       |
-| `test/bridges.test.ts`          | `ble-bridge` and `browser-bridge` WebSocket controllers — 4 tests                                                                          |
+| `test/bridges.test.ts`          | `ble-bridge` and `browser-bridge` WebSocket controllers — 6 tests                                                                          |
 | `test/default-device.test.ts`   | `DEFAULT_DEVICE_CODE` via `runDeviceLogic` — 8 tests covering start/reload/input/unknown events and edge cases                             |
 | `test/device-logic.test.ts`     | `runDeviceLogic` sandbox — 14 tests covering core behaviour, utils, console capture, state isolation, error handling, and sandbox security |
 | `test/devices.test.ts`          | `GET /ns/:token/devices` endpoint — 6 tests                                                                                                |
 | `test/namespaces.test.ts`       | `POST /mount` and `DELETE /ns/:token` — 4 tests                                                                                            |
 | `test/root.test.ts`             | `GET /` namespace index page — 3 tests                                                                                                     |
 | `test/server.test.ts`           | server lifecycle — spawns a real server, verifies state file round-trip and `stop` subcommand — 2 tests                                    |
-| `test/state-engine.test.ts`     | `applyCommands` (10 tests) and `initDeviceState` (1 test)                                                                                  |
+| `test/state-engine.test.ts`     | `applyCommands` (13 tests) and `initDeviceState` (1 test)                                                                                  |
+| `test/test-bridge.test.ts`      | `POST`/`GET` test-bridge endpoints and devices URL fields — 7 tests                                                                        |
 
 `test/fixtures/heart-rate-monitors/` contains the shared device fixture used across multiple suites.
 
