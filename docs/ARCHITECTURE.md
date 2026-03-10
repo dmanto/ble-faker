@@ -493,6 +493,45 @@ All URL construction, state file reading, and HTTP mechanics are internal to `Bl
 
 ---
 
+### 19. `ble-faker/device` — Device Types Subpath (`src/device.ts`)
+
+A types-only package subpath (no runtime code, `dist/device.d.ts` only) that enables IDE autocompletion, inline documentation, and `@ts-check` type errors in device `.js` logic files.
+
+#### Usage
+
+Add a three-line header to any device file:
+
+```js
+// @ts-check
+/// <reference types="ble-faker/device" />
+
+/** @type {import('ble-faker/device').DeviceLogicFn} */
+export default function (state, event) {
+  // event.kind autocompletes to 'start' | 'tick' | 'reload' | 'advertise' | 'notify' | 'input'
+  // utils.packUint16, utils.unpackFloat32, etc. all autocomplete with inline docs
+  return [];
+}
+```
+
+#### Exported types
+
+| Type | Description |
+|---|---|
+| `DeviceLogicFn` | The function signature: `(state, event) => DeviceCommand[] \| void` |
+| `DeviceState` | `{ dev, vars, chars, ui }` — the read-only state argument |
+| `DeviceEvent` | Discriminated union of all event kinds |
+| `DeviceCommand` | Union of all valid return items |
+| `DeviceUtils` | The `utils` global object shape |
+| `UiControl` | `{ name, label }` — one browser input or output field |
+
+Individual event types (`StartEvent`, `TickEvent`, `NotifyEvent`, etc.) and command types (`CharCommand`, `DisconnectCommand`, `ReadErrorCommand`, etc.) are also exported for narrowing.
+
+#### Global declarations
+
+`utils` is declared as a `var` in the global scope so VS Code recognises it without an import. `Buffer`, `TextEncoder`, and `TextDecoder` are standard globals that editors already know about.
+
+---
+
 ## Planned
 
 ### `ble-faker/metro` helper

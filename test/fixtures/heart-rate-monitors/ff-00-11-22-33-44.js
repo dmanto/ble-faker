@@ -1,3 +1,7 @@
+// @ts-check
+/// <reference types="ble-faker/device" />
+
+/** @type {import('ble-faker/device').DeviceLogicFn} */
 export default function (state, event) {
   if (event.kind === "start" || event.kind === "reload") {
     return [["2A37", "AAEC"]];

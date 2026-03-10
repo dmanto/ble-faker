@@ -18,6 +18,9 @@
     "./test": {
       "import": "./dist/test-client.js",
       "types": "./dist/test-client.d.ts"
+    },
+    "./device": {
+      "types": "./dist/device.d.ts"
     }
   },
   "repository": {
