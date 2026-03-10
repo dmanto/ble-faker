@@ -238,11 +238,40 @@ export class BleManager extends MockManager {
           uuid?: string;
           value?: string;
         };
-        if (msg.type !== "char" || !msg.uuid || msg.value === undefined) return;
-        const charUUID = msg.uuid.toLowerCase();
-        const serviceUUID = this._charServiceMap.get(deviceId)?.get(charUUID);
-        if (!serviceUUID) return;
-        this.setCharacteristicValue(deviceId, serviceUUID, charUUID, msg.value);
+        if (msg.type === "char") {
+          if (!msg.uuid || msg.value === undefined) return;
+          const charUUID = msg.uuid.toLowerCase();
+          const serviceUUID = this._charServiceMap.get(deviceId)?.get(charUUID);
+          if (!serviceUUID) return;
+          this.setCharacteristicValue(
+            deviceId,
+            serviceUUID,
+            charUUID,
+            msg.value,
+          );
+        } else if (msg.type === "disconnect") {
+          this.simulateDeviceDisconnection(
+            deviceId,
+            new Error("Simulated disconnection"),
+          );
+        } else if (msg.type === "readError" && msg.uuid) {
+          const charUUID = msg.uuid.toLowerCase();
+          const serviceUUID = this._charServiceMap.get(deviceId)?.get(charUUID);
+          if (serviceUUID) {
+            this.simulateCharacteristicReadError(
+              deviceId,
+              serviceUUID,
+              charUUID,
+              new Error("Simulated read error"),
+            );
+          }
+        } else if (msg.type === "clearReadError" && msg.uuid) {
+          const charUUID = msg.uuid.toLowerCase();
+          const serviceUUID = this._charServiceMap.get(deviceId)?.get(charUUID);
+          if (serviceUUID) {
+            this.clearCharacteristicReadError(deviceId, serviceUUID, charUUID);
+          }
+        }
       } catch {
         // ignore malformed messages
       }

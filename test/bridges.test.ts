@@ -58,6 +58,38 @@ test("browser-bridge: sends initial UI on connect", async (t) => {
   await ua.closedOk(1000);
 });
 
+test("ble-bridge: forwards disconnect command and closes", async (t) => {
+  const ns = await app.models.namespaces.create(FIXTURES_ROOT, "test");
+  const ua = await app.newTestUserAgent();
+  t.after(() => ua.stop());
+  t.after(() => app.models.namespaces.destroy(ns.token));
+
+  await ua.websocketOk(`/ns/${ns.token}/bridge/${TEST_ID}`, { json: true });
+  await ua.messageOk(); // consume initial char from start
+  const entry = ns.store.get(TEST_ID)!;
+  entry.events.emit("input", { id: "disconnect", payload: "" });
+  const msg = (await ua.messageOk()) as Record<string, string>;
+  assert.equal(msg["type"], "disconnect");
+  await ua.closedOk(1005);
+});
+
+test("ble-bridge: forwards readError command", async (t) => {
+  const ns = await app.models.namespaces.create(FIXTURES_ROOT, "test");
+  const ua = await app.newTestUserAgent();
+  t.after(() => ua.stop());
+  t.after(() => app.models.namespaces.destroy(ns.token));
+
+  await ua.websocketOk(`/ns/${ns.token}/bridge/${TEST_ID}`, { json: true });
+  await ua.messageOk(); // consume initial char from start
+  const entry = ns.store.get(TEST_ID)!;
+  entry.events.emit("input", { id: "readError", payload: "2A37" });
+  const msg = (await ua.messageOk()) as Record<string, string>;
+  assert.equal(msg["type"], "readError");
+  assert.equal(msg["uuid"], "2A37");
+  await ua.closeOk(1000, "");
+  await ua.closedOk(1000);
+});
+
 test("browser-bridge: forwards input message to device events", async (t) => {
   const ns = await app.models.namespaces.create(FIXTURES_ROOT, "test");
   const ua = await app.newTestUserAgent();

@@ -397,7 +397,7 @@ Long-polls until the device emits a `{ set: { <name>: value } }` output where `v
 
 The handler subscribes to `set` events on `entry.events` for the duration of the request — no polling, purely push-triggered. Returns `{ name, value }` on match, `408 Request Timeout` if the timeout expires without a match.
 
-> **Important:** the GET must be issued *before* the action that triggers the output, since events that fire while no subscriber is waiting are silently missed (no buffering).
+> **Important:** the GET must be issued _before_ the action that triggers the output, since events that fire while no subscriber is waiting are silently missed (no buffering).
 
 #### Shared input handler
 

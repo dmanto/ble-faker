@@ -34,6 +34,13 @@ export default class BleBridgeController {
         for (const msg of applied.wsMessages) {
           entry.events.emit("set", msg);
         }
+        for (const msg of applied.bridgeMessages) {
+          ws.send(msg).catch(() => {});
+          if (msg["type"] === "disconnect") {
+            ws.close();
+            return;
+          }
+        }
       };
 
       runEvent({ kind: "start" }, true);

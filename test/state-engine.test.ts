@@ -94,6 +94,37 @@ test.suite("applyCommands", async () => {
     assert.equal(state.vars["n"], 1);
   });
 
+  await test("disconnect — produces bridgeMessage, state unchanged", async () => {
+    const current = emptyDeviceState() as unknown as DeviceState;
+    const { state, bridgeMessages } = applyCommands(
+      [{ disconnect: true }],
+      current,
+    ) as unknown as ApplyResult;
+    assert.deepEqual(bridgeMessages, [{ type: "disconnect" }]);
+    assert.deepEqual(state.dev, {});
+  });
+
+  await test("readError — produces bridgeMessage with uuid, state unchanged", async () => {
+    const current = emptyDeviceState() as unknown as DeviceState;
+    const { state, bridgeMessages } = applyCommands(
+      [{ readError: { uuid: "2A37" } }],
+      current,
+    ) as unknown as ApplyResult;
+    assert.deepEqual(bridgeMessages, [{ type: "readError", uuid: "2A37" }]);
+    assert.deepEqual(state.dev, {});
+  });
+
+  await test("clearReadError — produces bridgeMessage with uuid", async () => {
+    const current = emptyDeviceState() as unknown as DeviceState;
+    const { bridgeMessages } = applyCommands(
+      [{ clearReadError: { uuid: "2A37" } }],
+      current,
+    ) as unknown as ApplyResult;
+    assert.deepEqual(bridgeMessages, [
+      { type: "clearReadError", uuid: "2A37" },
+    ]);
+  });
+
   await test("non-array result — returns current state unchanged", async () => {
     const current = emptyDeviceState() as unknown as DeviceState;
     const { state, wsMessages } = applyCommands(

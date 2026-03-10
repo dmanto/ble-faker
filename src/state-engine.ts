@@ -5,6 +5,7 @@ import type { DeviceState, UiControl } from "./models/store.js";
 export interface ApplyResult {
   state: DeviceState;
   wsMessages: Array<{ fieldName: string; value: string }>;
+  bridgeMessages: Array<Record<string, unknown>>;
 }
 
 export function emptyDeviceState(): DeviceState {
@@ -49,7 +50,7 @@ export function applyCommands(
   current: DeviceState,
 ): ApplyResult {
   if (!Array.isArray(result)) {
-    return { state: current, wsMessages: [] };
+    return { state: current, wsMessages: [], bridgeMessages: [] };
   }
 
   const state: DeviceState = {
@@ -59,6 +60,7 @@ export function applyCommands(
     ui: { ins: [...current.ui.ins], outs: [...current.ui.outs] },
   };
   const wsMessages: Array<{ fieldName: string; value: string }> = [];
+  const bridgeMessages: Array<Record<string, unknown>> = [];
 
   for (const item of result) {
     if (item === null || item === undefined) continue;
@@ -117,9 +119,41 @@ export function applyCommands(
       continue;
     }
 
+    // { disconnect: true } — simulate device disconnection on the app side
+    if ("disconnect" in item) {
+      if ((item as { disconnect: unknown }).disconnect === true) {
+        bridgeMessages.push({ type: "disconnect" });
+      }
+      continue;
+    }
+
+    // { readError: { uuid: string } } — make next read of a characteristic fail
+    if ("readError" in item) {
+      const re = (item as { readError: unknown }).readError;
+      if (re !== null && typeof re === "object") {
+        const uuid = (re as { uuid?: unknown }).uuid;
+        if (typeof uuid === "string") {
+          bridgeMessages.push({ type: "readError", uuid });
+        }
+      }
+      continue;
+    }
+
+    // { clearReadError: { uuid: string } } — clear a previously set read error
+    if ("clearReadError" in item) {
+      const cre = (item as { clearReadError: unknown }).clearReadError;
+      if (cre !== null && typeof cre === "object") {
+        const uuid = (cre as { uuid?: unknown }).uuid;
+        if (typeof uuid === "string") {
+          bridgeMessages.push({ type: "clearReadError", uuid });
+        }
+      }
+      continue;
+    }
+
     // plain object fallback — patch state.dev
     state.dev = { ...state.dev, ...(item as Record<string, unknown>) };
   }
 
-  return { state, wsMessages };
+  return { state, wsMessages, bridgeMessages };
 }
