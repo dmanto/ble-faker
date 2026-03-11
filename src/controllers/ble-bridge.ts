@@ -23,6 +23,11 @@ export default class BleBridgeController {
           entry.state,
           event,
         );
+        for (const { level, message } of out.logs) {
+          if (level === "error") ctx.log.error(`[device:${entry.id}] ${message}`);
+          else if (level === "warn") ctx.log.warn(`[device:${entry.id}] ${message}`);
+          else ctx.log.info(`[device:${entry.id}] ${message}`);
+        }
         const applied = applyCommands(out.result, entry.state);
         for (const [uuid, newVal] of Object.entries(applied.state.chars)) {
           if (newVal !== entry.state.chars[uuid]) {
