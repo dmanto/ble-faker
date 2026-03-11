@@ -24,8 +24,10 @@ export default class BleBridgeController {
           event,
         );
         for (const { level, message } of out.logs) {
-          if (level === "error") ctx.log.error(`[device:${entry.id}] ${message}`);
-          else if (level === "warn") ctx.log.warn(`[device:${entry.id}] ${message}`);
+          if (level === "error")
+            ctx.log.error(`[device:${entry.id}] ${message}`);
+          else if (level === "warn")
+            ctx.log.warn(`[device:${entry.id}] ${message}`);
           else ctx.log.info(`[device:${entry.id}] ${message}`);
         }
         const applied = applyCommands(out.result, entry.state);
@@ -45,10 +47,6 @@ export default class BleBridgeController {
         }
       };
 
-      // Push all chars initialised by the watcher's start event.
-      for (const [uuid, val] of Object.entries(entry.state.chars)) {
-        if (val !== "") ws.send({ type: "char", uuid, value: val }).catch(() => {});
-      }
       // Let device logic react to the new connection (session state, UI tweaks, etc.).
       runEvent({ kind: "connect" });
       entry.events.emit("ui", entry.state.ui);
@@ -60,7 +58,8 @@ export default class BleBridgeController {
       // Push the refreshed chars to the connected app.
       const onReload = () => {
         for (const [uuid, val] of Object.entries(entry.state.chars)) {
-          if (val !== "") ws.send({ type: "char", uuid, value: val }).catch(() => {});
+          if (val !== "")
+            ws.send({ type: "char", uuid, value: val }).catch(() => {});
         }
         entry.events.emit("ui", entry.state.ui);
       };

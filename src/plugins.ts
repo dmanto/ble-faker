@@ -70,13 +70,10 @@ export function runDeviceLogic(
       // Unpack helpers — inverse of the pack functions above
       unpackUint8: (b64: string) => Buffer.from(b64, "base64").readUInt8(0),
       unpackInt8: (b64: string) => Buffer.from(b64, "base64").readInt8(0),
-      unpackUint16: (b64: string) =>
-        Buffer.from(b64, "base64").readUInt16LE(0),
+      unpackUint16: (b64: string) => Buffer.from(b64, "base64").readUInt16LE(0),
       unpackInt16: (b64: string) => Buffer.from(b64, "base64").readInt16LE(0),
-      unpackUint32: (b64: string) =>
-        Buffer.from(b64, "base64").readUInt32LE(0),
-      unpackFloat32: (b64: string) =>
-        Buffer.from(b64, "base64").readFloatLE(0),
+      unpackUint32: (b64: string) => Buffer.from(b64, "base64").readUInt32LE(0),
+      unpackFloat32: (b64: string) => Buffer.from(b64, "base64").readFloatLE(0),
     },
     state: JSON.parse(JSON.stringify(currentState)) as Record<string, unknown>,
     event,

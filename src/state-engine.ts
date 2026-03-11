@@ -51,7 +51,12 @@ export function applyCommands(
   current: DeviceState,
 ): ApplyResult {
   if (!Array.isArray(result)) {
-    return { state: current, charUpdates: [], wsMessages: [], bridgeMessages: [] };
+    return {
+      state: current,
+      charUpdates: [],
+      wsMessages: [],
+      bridgeMessages: [],
+    };
   }
 
   const state: DeviceState = {

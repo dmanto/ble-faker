@@ -132,15 +132,15 @@ export default function (state, event) {
 
 The `event` argument is a typed discriminated union (`DeviceEvent`):
 
-| kind           | description                                                                                                             |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `start`        | fired on namespace creation and on every device `.js` file change — use to initialise `state.vars` (NVM semantics)     |
-| `connect`      | fired on every new BLE bridge WebSocket connection — use for per-connection setup                                       |
-| `disconnect`   | fired after the BLE bridge WebSocket closes — `vars` updates persist; char/bridge messages have nowhere to go           |
-| `tick`         | periodic 1-second timer (only while a bridge is connected)                                                              |
-| `advertise`    | fired on each `GET /ns/:token/devices` request to build the advertising packet                                          |
-| `notify`       | characteristic write from the app — `uuid` + `payload` (base64)                                                        |
-| `input`        | browser UI form submit — `id` + `payload`                                                                               |
+| kind         | description                                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `start`      | fired on namespace creation and on every device `.js` file change — use to initialise `state.vars` (NVM semantics) |
+| `connect`    | fired on every new BLE bridge WebSocket connection — use for per-connection setup                                  |
+| `disconnect` | fired after the BLE bridge WebSocket closes — `vars` updates persist; char/bridge messages have nowhere to go      |
+| `tick`       | periodic 1-second timer (only while a bridge is connected)                                                         |
+| `advertise`  | fired on each `GET /ns/:token/devices` request to build the advertising packet                                     |
+| `notify`     | characteristic write from the app — `uuid` + `payload` (base64)                                                    |
+| `input`      | browser UI form submit — `id` + `payload`                                                                          |
 
 > **Note:** `start` is a **device NVM init event** — it fires when the namespace is created (server boot or `POST /mount`) and again whenever the device `.js` file changes on disk. It does **not** fire on BLE reconnection. `state.vars` is always empty when `start` fires; whatever you write there via `{ vars: … }` acts as non-volatile memory that persists across multiple BLE connections until the next `start` event. Use `connect` for per-connection setup. `tick` only fires while a bridge WebSocket is open.
 
@@ -148,38 +148,38 @@ The `event` argument is a typed discriminated union (`DeviceEvent`):
 
 Each item in the returned array is discriminated by shape:
 
-| Item shape                        | Discriminant          | Effect                                                                                                         |
-| --------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `['2A37', base64]`                | `Array.isArray`       | Updates a GATT characteristic value                                                                            |
-| `{ name, rssi, … }`               | plain object fallback | Patches `state.dev` (any `Partial<Device>` field)                                                              |
-| `{ in: [{ name, label }] }`       | `'in' in item`        | Defines browser input controls: one label + text field + submit button per entry; submit POSTs → `input` event |
-| `{ out: [{ name, label }] }`      | `'out' in item`       | Defines browser output display fields: one label + empty field per entry, `id` taken from `name`               |
-| `{ set: { fieldName: 'val' } }`   | `'set' in item`       | Pushes string values to named output fields in the browser via WebSocket                                       |
-| `{ vars: { name: anyValue } }`    | `'vars' in item`      | Persists any-typed values into `state.vars` for the next call — the only way to write device-local state       |
-| `{ disconnect: true }`            | `'disconnect' in item`| Triggers `simulateDeviceDisconnection` on the app-side mock; bridge WS is closed immediately after             |
-| `{ readError: { uuid: string } }` | `'readError' in item` | Triggers `simulateCharacteristicReadError` for the given UUID; error persists until cleared                    |
-| `{ clearReadError: { uuid } }`    | `'clearReadError' in item` | Clears a previously set read error for the given UUID                                                     |
+| Item shape                        | Discriminant               | Effect                                                                                                         |
+| --------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `['2A37', base64]`                | `Array.isArray`            | Updates a GATT characteristic value                                                                            |
+| `{ name, rssi, … }`               | plain object fallback      | Patches `state.dev` (any `Partial<Device>` field)                                                              |
+| `{ in: [{ name, label }] }`       | `'in' in item`             | Defines browser input controls: one label + text field + submit button per entry; submit POSTs → `input` event |
+| `{ out: [{ name, label }] }`      | `'out' in item`            | Defines browser output display fields: one label + empty field per entry, `id` taken from `name`               |
+| `{ set: { fieldName: 'val' } }`   | `'set' in item`            | Pushes string values to named output fields in the browser via WebSocket                                       |
+| `{ vars: { name: anyValue } }`    | `'vars' in item`           | Persists any-typed values into `state.vars` for the next call — the only way to write device-local state       |
+| `{ disconnect: true }`            | `'disconnect' in item`     | Triggers `simulateDeviceDisconnection` on the app-side mock; bridge WS is closed immediately after             |
+| `{ readError: { uuid: string } }` | `'readError' in item`      | Triggers `simulateCharacteristicReadError` for the given UUID; error persists until cleared                    |
+| `{ clearReadError: { uuid } }`    | `'clearReadError' in item` | Clears a previously set read error for the given UUID                                                          |
 
 #### `utils` reference
 
 All pack/unpack helpers use **little-endian** byte order (standard for Bluetooth SIG GATT specs).
 
-| Function | Description |
-|---|---|
+| Function                    | Description                            |
+| --------------------------- | -------------------------------------- |
 | `toBase64(arr: Uint8Array)` | Encode a byte array to a base64 string |
-| `fromBase64(b64: string)` | Decode a base64 string to a `Buffer` |
-| `packUint8(n)` | 1-byte unsigned integer → base64 |
-| `packInt8(n)` | 1-byte signed integer → base64 |
-| `packUint16(n)` | 2-byte unsigned integer → base64 |
-| `packInt16(n)` | 2-byte signed integer → base64 |
-| `packUint32(n)` | 4-byte unsigned integer → base64 |
-| `packFloat32(n)` | 4-byte IEEE 754 float → base64 |
-| `unpackUint8(b64)` | base64 → 1-byte unsigned integer |
-| `unpackInt8(b64)` | base64 → 1-byte signed integer |
-| `unpackUint16(b64)` | base64 → 2-byte unsigned integer |
-| `unpackInt16(b64)` | base64 → 2-byte signed integer |
-| `unpackUint32(b64)` | base64 → 4-byte unsigned integer |
-| `unpackFloat32(b64)` | base64 → 4-byte IEEE 754 float |
+| `fromBase64(b64: string)`   | Decode a base64 string to a `Buffer`   |
+| `packUint8(n)`              | 1-byte unsigned integer → base64       |
+| `packInt8(n)`               | 1-byte signed integer → base64         |
+| `packUint16(n)`             | 2-byte unsigned integer → base64       |
+| `packInt16(n)`              | 2-byte signed integer → base64         |
+| `packUint32(n)`             | 4-byte unsigned integer → base64       |
+| `packFloat32(n)`            | 4-byte IEEE 754 float → base64         |
+| `unpackUint8(b64)`          | base64 → 1-byte unsigned integer       |
+| `unpackInt8(b64)`           | base64 → 1-byte signed integer         |
+| `unpackUint16(b64)`         | base64 → 2-byte unsigned integer       |
+| `unpackInt16(b64)`          | base64 → 2-byte signed integer         |
+| `unpackUint32(b64)`         | base64 → 4-byte unsigned integer       |
+| `unpackFloat32(b64)`        | base64 → 4-byte IEEE 754 float         |
 
 `in`/`out` definitions are typically returned from `start` events (and re-applied on file change). Error commands (`disconnect`, `readError`, `clearReadError`) are typically returned from `input` events — they are forwarded by the ble-bridge to the mock app via the WS channel (`bridgeMessages` in `ApplyResult`) and do not affect `state`.
 
@@ -533,14 +533,14 @@ export default function (state, event) {
 
 #### Exported types
 
-| Type | Description |
-|---|---|
+| Type            | Description                                                         |
+| --------------- | ------------------------------------------------------------------- |
 | `DeviceLogicFn` | The function signature: `(state, event) => DeviceCommand[] \| void` |
-| `DeviceState` | `{ dev, vars, chars, ui }` — the read-only state argument |
-| `DeviceEvent` | Discriminated union of all event kinds |
-| `DeviceCommand` | Union of all valid return items |
-| `DeviceUtils` | The `utils` global object shape |
-| `UiControl` | `{ name, label }` — one browser input or output field |
+| `DeviceState`   | `{ dev, vars, chars, ui }` — the read-only state argument           |
+| `DeviceEvent`   | Discriminated union of all event kinds                              |
+| `DeviceCommand` | Union of all valid return items                                     |
+| `DeviceUtils`   | The `utils` global object shape                                     |
+| `UiControl`     | `{ name, label }` — one browser input or output field               |
 
 Individual event types (`StartEvent`, `ConnectEvent`, `DisconnectEvent`, `TickEvent`, `AdvertiseEvent`, `NotifyEvent`, `InputEvent`) and command types (`CharCommand`, `DisconnectCommand`, `ReadErrorCommand`, etc.) are also exported for narrowing.
 
