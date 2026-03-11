@@ -29,10 +29,8 @@ export default class BleBridgeController {
           else ctx.log.info(`[device:${entry.id}] ${message}`);
         }
         const applied = applyCommands(out.result, entry.state);
-        for (const [uuid, newVal] of Object.entries(applied.state.chars)) {
-          if (newVal !== entry.state.chars[uuid]) {
-            ws.send({ type: "char", uuid, value: newVal }).catch(() => {});
-          }
+        for (const [uuid, value] of applied.charUpdates) {
+          ws.send({ type: "char", uuid, value }).catch(() => {});
         }
         entry.state = applied.state;
         for (const msg of applied.wsMessages) {

@@ -4,6 +4,7 @@ import type { DeviceState, UiControl } from "./models/store.js";
 
 export interface ApplyResult {
   state: DeviceState;
+  charUpdates: Array<[string, string]>;
   wsMessages: Array<{ fieldName: string; value: string }>;
   bridgeMessages: Array<Record<string, unknown>>;
 }
@@ -50,7 +51,7 @@ export function applyCommands(
   current: DeviceState,
 ): ApplyResult {
   if (!Array.isArray(result)) {
-    return { state: current, wsMessages: [], bridgeMessages: [] };
+    return { state: current, charUpdates: [], wsMessages: [], bridgeMessages: [] };
   }
 
   const state: DeviceState = {
@@ -59,6 +60,7 @@ export function applyCommands(
     chars: { ...current.chars },
     ui: { ins: [...current.ui.ins], outs: [...current.ui.outs] },
   };
+  const charUpdates: Array<[string, string]> = [];
   const wsMessages: Array<{ fieldName: string; value: string }> = [];
   const bridgeMessages: Array<Record<string, unknown>> = [];
 
@@ -73,6 +75,7 @@ export function applyCommands(
         typeof item[1] === "string"
       ) {
         state.chars[item[0]] = item[1];
+        charUpdates.push([item[0], item[1]]);
       }
       continue;
     }
@@ -155,5 +158,5 @@ export function applyCommands(
     state.dev = { ...state.dev, ...(item as Record<string, unknown>) };
   }
 
-  return { state, wsMessages, bridgeMessages };
+  return { state, charUpdates, wsMessages, bridgeMessages };
 }

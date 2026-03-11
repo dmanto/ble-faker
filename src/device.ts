@@ -117,6 +117,7 @@ export type VarsCommand = { vars: Record<string, unknown> };
 /** Simulate a device disconnection on the app side. Closes the bridge WebSocket. */
 export type DisconnectCommand = { disconnect: true };
 
+
 /**
  * Make the next read of a characteristic fail with an error.
  * The error persists until cleared with `clearReadError`.
