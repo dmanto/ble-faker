@@ -2,10 +2,9 @@
  * Type declarations for ble-faker device logic files.
  *
  * Add the following header to any device .js file to enable IDE
- * autocompletion, inline docs, and @ts-check type errors:
+ * autocompletion and inline docs:
  *
  * ```js
- * // @ts-check
  * /// <reference types="ble-faker/device" />
  *
  * /** @type {import('ble-faker/device').DeviceLogicFn} *\/
@@ -13,6 +12,11 @@
  *   return [];
  * }
  * ```
+ *
+ * Note: `// @ts-check` is intentionally omitted. React Native projects
+ * typically do not enable `checkJs`, so the reference and `@type` annotation
+ * give full autocompletion and event/state narrowing without triggering
+ * `noImplicitAny` errors on helper function parameters.
  */
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -127,7 +131,6 @@ export type DeviceCommand =
  *
  * @example
  * ```js
- * // @ts-check
  * /// <reference types="ble-faker/device" />
  *
  * /** @type {import('ble-faker/device').DeviceLogicFn} *\/

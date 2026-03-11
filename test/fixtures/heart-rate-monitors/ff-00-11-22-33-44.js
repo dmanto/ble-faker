@@ -1,4 +1,3 @@
-// @ts-check
 /// <reference types="ble-faker/device" />
 
 /** @type {import('ble-faker/device').DeviceLogicFn} */
