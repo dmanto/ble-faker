@@ -71,12 +71,23 @@ Exported from `src/index.ts` as `import { bleMockServer } from 'ble-faker'`.
 Device `.js` files export a single default function. A complete example showing all event kinds:
 
 ```js
+/// <reference types="ble-faker/device" />
+
+/** @type {import('ble-faker/device').DeviceLogicFn} */
 export default function (state, event) {
   if (event.kind === "start") {
+    // Fires on namespace creation and file change — acts as NVM init.
+    // state.vars is always empty here; set initial non-volatile values.
     return [
+      { vars: { hr: 72 } },
       { in: [{ name: "target", label: "Target HR" }] },
       { out: [{ name: "current", label: "Current HR" }] },
     ];
+  }
+
+  if (event.kind === "connect") {
+    // Fires on every new BLE bridge connection — use for per-connection setup.
+    return [];
   }
 
   if (event.kind === "advertise") {
@@ -84,12 +95,18 @@ export default function (state, event) {
   }
 
   if (event.kind === "tick") {
-    const hr = state.vars?.hr ?? 72;
+    const hr = state.vars.hr ?? 72;
     return [["2A37", utils.packUint16(hr)], { set: { current: String(hr) } }];
   }
 
   if (event.kind === "input" && event.id === "target") {
     return [{ vars: { hr: parseInt(event.payload, 10) } }];
+  }
+
+  if (event.kind === "disconnect") {
+    // Fires after the bridge WS closes. vars updates still persist;
+    // char/bridge messages have nowhere to go.
+    return [];
   }
 
   return [];
@@ -115,16 +132,17 @@ export default function (state, event) {
 
 The `event` argument is a typed discriminated union (`DeviceEvent`):
 
-| kind        | description                                                                    |
-| ----------- | ------------------------------------------------------------------------------ |
-| `start`     | fired on every new bridge WebSocket connection                                 |
-| `tick`      | periodic 1-second timer (while a bridge is connected)                          |
-| `reload`    | mock file changed on disk (while a bridge is connected)                        |
-| `advertise` | fired on each `GET /ns/:token/devices` request to build the advertising packet |
-| `notify`    | characteristic write from the app — `uuid` + `payload` (base64)                |
-| `input`     | browser UI form submit — `id` + `payload`                                      |
+| kind           | description                                                                                                             |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `start`        | fired on namespace creation and on every device `.js` file change — use to initialise `state.vars` (NVM semantics)     |
+| `connect`      | fired on every new BLE bridge WebSocket connection — use for per-connection setup                                       |
+| `disconnect`   | fired after the BLE bridge WebSocket closes — `vars` updates persist; char/bridge messages have nowhere to go           |
+| `tick`         | periodic 1-second timer (only while a bridge is connected)                                                              |
+| `advertise`    | fired on each `GET /ns/:token/devices` request to build the advertising packet                                          |
+| `notify`       | characteristic write from the app — `uuid` + `payload` (base64)                                                        |
+| `input`        | browser UI form submit — `id` + `payload`                                                                               |
 
-> **Note:** `start` fires on **every** new bridge connection, not just when the server starts. This allows per-connection state reset. `tick` and `reload` only fire while a bridge WebSocket is open.
+> **Note:** `start` is a **device NVM init event** — it fires when the namespace is created (server boot or `POST /mount`) and again whenever the device `.js` file changes on disk. It does **not** fire on BLE reconnection. `state.vars` is always empty when `start` fires; whatever you write there via `{ vars: … }` acts as non-volatile memory that persists across multiple BLE connections until the next `start` event. Use `connect` for per-connection setup. `tick` only fires while a bridge WebSocket is open.
 
 #### Return format — command dispatch
 
@@ -163,7 +181,7 @@ All pack/unpack helpers use **little-endian** byte order (standard for Bluetooth
 | `unpackUint32(b64)` | base64 → 4-byte unsigned integer |
 | `unpackFloat32(b64)` | base64 → 4-byte IEEE 754 float |
 
-`in`/`out` definitions are typically returned from `start` and `reload` events. Error commands (`disconnect`, `readError`, `clearReadError`) are typically returned from `input` events — they are forwarded by the ble-bridge to the mock app via the WS channel (`bridgeMessages` in `ApplyResult`) and do not affect `state`.
+`in`/`out` definitions are typically returned from `start` events (and re-applied on file change). Error commands (`disconnect`, `readError`, `clearReadError`) are typically returned from `input` events — they are forwarded by the ble-bridge to the mock app via the WS channel (`bridgeMessages` in `ApplyResult`) and do not affect `state`.
 
 > **Note:** `state` is read-only from the device code's perspective. Writing `state.hr = 42` inside the function will silently have no effect. Use `{ vars: { hr: 42 } }` instead.
 
@@ -216,7 +234,7 @@ Started per-namespace (in `Namespaces.create`) via `startWatcher(dir, store)` us
 - **Initial scan** (synchronous): walks `<dir>/<category>/` subdirectories that contain a `gatt-profile.json`. For each `<MAC>.js` file found, calls `addDevice` which reads the profile into `initDeviceState`, sets `state.dev.id`, and registers the entry in the store.
 - **Live watching**: after startup, chokidar watches for:
   - `add` — new `.js` file → `addDevice`
-  - `change` — existing `.js` modified → emits `"reload"` on `entry.events` (picked up by any active bridge)
+  - `change` — existing `.js` modified → resets `entry.state` to `initDeviceState`, re-runs the `start` event (applying all commands including chars, vars, ui, and dev patches), then emits internal `"reload"` on `entry.events` so any active bridge pushes the refreshed chars to the app
   - `unlink` — `.js` deleted → emits `"remove"` on `entry.events`, then removes from store
 
 Device IDs must match the pattern `[0-9a-f]{2}(-[0-9a-f]{2}){5}` (MAC address with dashes). Files not matching this pattern are ignored.
@@ -235,15 +253,16 @@ The result of `applyCommands` is written back to `entry.state`, so `{ vars: … 
 
 On each new connection:
 
-1. **`start`** event fires — device logic initialises characteristics and UI. Any characteristic diff (new value ≠ stored value) is sent to the app immediately as `{ type: "char", uuid, value }`.
-2. **Tick timer** fires every 1 second — drives `tick` events; diffs are forwarded to the app.
-3. **`reload`** event — wired to `entry.events`; fires when the device `.js` file changes on disk.
-4. **`input`** event — wired to `entry.events`; fires when the browser UI submits a form field or when the test HTTP endpoint injects an input (see §17).
-5. **Incoming messages** (app → server): `{ uuid, payload }` objects are forwarded as `notify` events. The result is applied and diffs are sent back to the app.
+1. **Char push** — all current `entry.state.chars` values (set by the watcher's `start` run) are sent to the app immediately as `{ type: "char", uuid, value }` (non-empty values only).
+2. **`connect`** event fires — device logic can perform per-connection setup. Diffs from the result are sent to the app.
+3. **Tick timer** fires every 1 second — drives `tick` events; diffs are forwarded to the app.
+4. **File change** (internal `"reload"` on `entry.events`) — the watcher has already re-run `start` and updated `entry.state`. The bridge pushes all current chars to the app and emits the updated UI.
+5. **`input`** event — wired to `entry.events`; fires when the browser UI submits a form field or when the test HTTP endpoint injects an input (see §17).
+6. **Incoming messages** (app → server): `{ uuid, payload }` objects are forwarded as `notify` events. The result is applied and diffs are sent back to the app.
 
 After processing each event, any `bridgeMessages` from `applyCommands` are sent to the app over the WS. If a `{ type: "disconnect" }` message is among them, the bridge WS is closed server-side immediately after sending it.
 
-On WebSocket close: tick timer and event listeners are removed.
+On WebSocket close: tick timer and event listeners are removed, then the **`disconnect`** event fires — device logic can persist session cleanup via `{ vars: … }` for the next connection.
 
 The server sends characteristic updates **only for changed values** (diff against `entry.state.chars`), then writes the new state back to `entry.state`.
 
@@ -395,13 +414,13 @@ Opened immediately after `connectToDevice` succeeds (`/ns/:token/bridge/:id`), c
 
 ### 15. Tests
 
-79 tests across 10 files, run in parallel via `node --test test/**/*.test.ts`:
+78 tests across 10 files, run in parallel via `node --test test/**/*.test.ts`:
 
 | file                            | what it covers                                                                                                                             |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `test/advertising-size.test.ts` | `calculateAdvertizingSize` helper (packet size arithmetic) — 5 tests                                                                       |
 | `test/bridges.test.ts`          | `ble-bridge` and `browser-bridge` WebSocket controllers — 6 tests                                                                          |
-| `test/default-device.test.ts`   | `DEFAULT_DEVICE_CODE` via `runDeviceLogic` — 8 tests covering start/reload/input/unknown events and edge cases                             |
+| `test/default-device.test.ts`   | `DEFAULT_DEVICE_CODE` via `runDeviceLogic` — 7 tests covering start/input/unknown events and edge cases                                    |
 | `test/device-logic.test.ts`     | `runDeviceLogic` sandbox — 21 tests covering core behaviour, utils, console capture, state isolation, error handling, and sandbox security |
 | `test/devices.test.ts`          | `GET /ns/:token/devices` endpoint — 6 tests                                                                                                |
 | `test/namespaces.test.ts`       | `POST /mount` and `DELETE /ns/:token` — 4 tests                                                                                            |
@@ -495,19 +514,18 @@ All URL construction, state file reading, and HTTP mechanics are internal to `Bl
 
 ### 19. `ble-faker/device` — Device Types Subpath (`src/device.ts`)
 
-A types-only package subpath (no runtime code, `dist/device.d.ts` only) that enables IDE autocompletion, inline documentation, and `@ts-check` type errors in device `.js` logic files.
+A types-only package subpath (no runtime code, `dist/device.d.ts` only) that enables IDE autocompletion and inline documentation in device `.js` logic files. `// @ts-check` is intentionally **omitted** from the recommended header — React Native projects do not enable `checkJs`, so adding it triggers `noImplicitAny` errors on untyped helper function parameters. The `/// <reference>` directive and `@type` annotation alone give full autocompletion and event/state narrowing.
 
 #### Usage
 
-Add a three-line header to any device file:
+Add a two-line header to any device file:
 
 ```js
-// @ts-check
 /// <reference types="ble-faker/device" />
 
 /** @type {import('ble-faker/device').DeviceLogicFn} */
 export default function (state, event) {
-  // event.kind autocompletes to 'start' | 'tick' | 'reload' | 'advertise' | 'notify' | 'input'
+  // event.kind autocompletes to 'start' | 'connect' | 'disconnect' | 'tick' | 'advertise' | 'notify' | 'input'
   // utils.packUint16, utils.unpackFloat32, etc. all autocomplete with inline docs
   return [];
 }
@@ -524,7 +542,7 @@ export default function (state, event) {
 | `DeviceUtils` | The `utils` global object shape |
 | `UiControl` | `{ name, label }` — one browser input or output field |
 
-Individual event types (`StartEvent`, `TickEvent`, `NotifyEvent`, etc.) and command types (`CharCommand`, `DisconnectCommand`, `ReadErrorCommand`, etc.) are also exported for narrowing.
+Individual event types (`StartEvent`, `ConnectEvent`, `DisconnectEvent`, `TickEvent`, `AdvertiseEvent`, `NotifyEvent`, `InputEvent`) and command types (`CharCommand`, `DisconnectCommand`, `ReadErrorCommand`, etc.) are also exported for narrowing.
 
 #### Global declarations
 
