@@ -2,7 +2,7 @@
 
 /** @type {import('ble-faker/device').DeviceLogicFn} */
 export default function (state, event) {
-  if (event.kind === "start" || event.kind === "reload") {
+  if (event.kind === "start") {
     return [["2A37", "AAEC"]];
   }
   if (event.kind === "notify") {

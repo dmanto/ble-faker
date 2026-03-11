@@ -10,7 +10,7 @@ export const DEFAULT_DEVICE_CODE = `\
 export default function(state, event) {
   var LABELS = ${JSON.stringify(GATT_LABELS)};
 
-  if (event.kind === 'start' || event.kind === 'reload') {
+  if (event.kind === 'start') {
     var mac = typeof state.dev.id === 'string' ? state.dev.id.replace(/-/g, '') : '';
     var shortId = mac.slice(-5).toUpperCase();
     var name = shortId ? ('ESP32_' + shortId) : 'ESP32';

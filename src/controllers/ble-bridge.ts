@@ -17,7 +17,7 @@ export default class BleBridgeController {
     }
 
     ctx.json(async (ws) => {
-      const runEvent = (event: DeviceEvent, emitUi = false): void => {
+      const runEvent = (event: DeviceEvent): void => {
         const out = ctx.runDeviceLogic(
           readDeviceCode(entry.jsFilePath),
           entry.state,
@@ -30,7 +30,6 @@ export default class BleBridgeController {
           }
         }
         entry.state = applied.state;
-        if (emitUi) entry.events.emit("ui", entry.state.ui);
         for (const msg of applied.wsMessages) {
           entry.events.emit("set", msg);
         }
@@ -43,12 +42,25 @@ export default class BleBridgeController {
         }
       };
 
-      runEvent({ kind: "start" }, true);
+      // Push all chars initialised by the watcher's start event.
+      for (const [uuid, val] of Object.entries(entry.state.chars)) {
+        if (val !== "") ws.send({ type: "char", uuid, value: val }).catch(() => {});
+      }
+      // Let device logic react to the new connection (session state, UI tweaks, etc.).
+      runEvent({ kind: "connect" });
+      entry.events.emit("ui", entry.state.ui);
 
       const ticker = setInterval(() => runEvent({ kind: "tick" }), TICK_MS);
       ticker.unref();
 
-      const onReload = () => runEvent({ kind: "reload" }, true);
+      // On file change the watcher re-runs start and emits "reload".
+      // Push the refreshed chars to the connected app.
+      const onReload = () => {
+        for (const [uuid, val] of Object.entries(entry.state.chars)) {
+          if (val !== "") ws.send({ type: "char", uuid, value: val }).catch(() => {});
+        }
+        entry.events.emit("ui", entry.state.ui);
+      };
       entry.events.on("reload", onReload);
 
       const onInput = ({
@@ -73,6 +85,10 @@ export default class BleBridgeController {
       entry.events.off("reload", onReload);
       entry.events.off("input", onInput);
       entry.events.off("remove", onRemove);
+
+      // WS is closed — run disconnect so device logic can clean up state.vars.
+      // Char/bridge messages have nowhere to go but vars updates still persist.
+      runEvent({ kind: "disconnect" });
     });
   }
 }

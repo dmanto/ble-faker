@@ -54,14 +54,26 @@ export interface DeviceState {
 
 // ─── Events ──────────────────────────────────────────────────────────────────
 
-/** Fired on every new BLE bridge WebSocket connection. Use for per-connection initialisation. */
+/**
+ * Fired once when the namespace starts and again whenever the device .js file
+ * changes on disk. Use this event to initialise `state.vars` — values set here
+ * act as non-volatile memory (NVM) and persist across BLE reconnections until
+ * the next `start` event.
+ */
 export type StartEvent = { kind: "start" };
+
+/** Fired on every new BLE bridge WebSocket connection. Use for per-connection setup. */
+export type ConnectEvent = { kind: "connect" };
+
+/**
+ * Fired after the BLE bridge WebSocket closes (app disconnected).
+ * The app can no longer receive messages, but returned commands are still applied
+ * to `state` — use `{ vars: { … } }` to persist session cleanup for the next connect.
+ */
+export type DisconnectEvent = { kind: "disconnect" };
 
 /** Fired every second while a bridge WebSocket is open. */
 export type TickEvent = { kind: "tick" };
-
-/** Fired when the device .js file changes on disk (live reload). */
-export type ReloadEvent = { kind: "reload" };
 
 /** Fired on each GET /devices request to build the advertising packet. Result is persisted. */
 export type AdvertiseEvent = { kind: "advertise" };
@@ -75,8 +87,9 @@ export type InputEvent = { kind: "input"; id: string; payload: string };
 /** Discriminated union of all event kinds passed to device logic. */
 export type DeviceEvent =
   | StartEvent
+  | ConnectEvent
+  | DisconnectEvent
   | TickEvent
-  | ReloadEvent
   | AdvertiseEvent
   | NotifyEvent
   | InputEvent;

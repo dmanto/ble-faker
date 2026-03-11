@@ -114,16 +114,6 @@ test.suite("DEFAULT_DEVICE_CODE", async () => {
     assert.equal((result as unknown[]).length, 1);
   });
 
-  await test("reload — behaves identically to start", async () => {
-    const start = ctx.runDeviceLogic(DEFAULT_DEVICE_CODE, HEART_RATE_STATE, {
-      kind: "start",
-    });
-    const reload = ctx.runDeviceLogic(DEFAULT_DEVICE_CODE, HEART_RATE_STATE, {
-      kind: "reload",
-    });
-    assert.deepEqual(start.result, reload.result);
-  });
-
   await test("input — returns characteristic update with base64 payload", async () => {
     const { result } = ctx.runDeviceLogic(
       DEFAULT_DEVICE_CODE,

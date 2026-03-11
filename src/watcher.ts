@@ -2,7 +2,7 @@ import { watch, type FSWatcher } from "chokidar";
 import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import path from "node:path";
-import type { Store } from "./models/store.js";
+import type { DeviceEntry, Store } from "./models/store.js";
 import { sanitizeDeviceId } from "./models/store.js";
 import { applyCommands, initDeviceState } from "./state-engine.js";
 import { runDeviceLogic } from "./plugins.js";
@@ -41,7 +41,13 @@ export function startWatcher(mocksDir: string, store: Store): FSWatcher {
     .on("change", (filePath: string) => {
       if (!filePath.endsWith(".js")) return;
       const id = sanitizeDeviceId(path.basename(filePath, ".js"));
-      store.get(id)?.events.emit("reload");
+      const entry = store.get(id);
+      if (!entry) return;
+      // File changed = device reboot: reset state and re-run start.
+      entry.state = initDeviceState(entry.categoryDir);
+      entry.state.dev["id"] = id;
+      runStartForEntry(entry);
+      entry.events.emit("reload"); // tell connected bridges to push updated chars
     })
     .on("unlink", (filePath: string) => {
       if (!filePath.endsWith(".js")) return;
@@ -67,7 +73,7 @@ function addDevice(
   if (store.has(id)) return;
   const state = initDeviceState(categoryDir);
   state.dev["id"] = id;
-  const entry = {
+  const entry: DeviceEntry = {
     id,
     categoryDir,
     jsFilePath,
@@ -75,18 +81,21 @@ function addDevice(
     events: new EventEmitter(),
   };
   store.add(entry);
+  runStartForEntry(entry);
+}
 
-  // Warm up device state before any client connects
-  // Warm up vars/ui/dev before any client connects, but leave chars empty so
-  // the ble-bridge can diff from a clean baseline on first connection.
-  const code = readDeviceCode(jsFilePath);
+/**
+ * Run the `start` device event and apply all results (vars, ui, dev, chars)
+ * to the entry's state. Also runs `advertise` to populate the device name/rssi.
+ * Called on device first-add and on file change (device reboot).
+ */
+function runStartForEntry(entry: DeviceEntry): void {
+  const code = readDeviceCode(entry.jsFilePath);
   const { state: startState } = applyCommands(
     runDeviceLogic(code, entry.state, { kind: "start" }).result,
     entry.state,
   );
-  entry.state.vars = startState.vars;
-  entry.state.ui = startState.ui;
-  entry.state.dev = startState.dev;
+  entry.state = startState;
   const { state: advState } = applyCommands(
     runDeviceLogic(code, entry.state, { kind: "advertise" }).result,
     entry.state,
