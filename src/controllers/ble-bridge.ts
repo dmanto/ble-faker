@@ -33,9 +33,11 @@ export default class BleBridgeController {
         const applied = applyCommands(out.result, entry.state);
         for (const [uuid, value] of applied.charUpdates) {
           ws.send({ type: "char", uuid, value }).catch(() => {});
+          entry.events.emit("charUpdate", { uuid, value });
         }
         entry.state = applied.state;
         for (const msg of applied.wsMessages) {
+          entry.lastOutputValues[msg["fieldName"] as string] = msg["value"] as string;
           entry.events.emit("set", msg);
         }
         for (const msg of applied.bridgeMessages) {

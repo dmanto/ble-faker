@@ -79,6 +79,7 @@ function addDevice(
     jsFilePath,
     state,
     events: new EventEmitter(),
+    lastOutputValues: {},
   };
   store.add(entry);
   runStartForEntry(entry);

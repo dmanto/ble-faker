@@ -19,6 +19,7 @@ export interface DeviceEntry {
   state: DeviceState;
   events: EventEmitter;
   bridgeOpen?: boolean;
+  lastOutputValues: Record<string, string>;
 }
 
 export function sanitizeDeviceId(raw: string): string {
