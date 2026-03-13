@@ -247,6 +247,113 @@ Logic files run in an isolated `node:vm` context with a 50ms CPU budget per call
 
 ---
 
+## Testing
+
+The `ble-faker/test` client gives you a typed API to control simulated devices and assert on their behavior from test code — no HTTP or WebSocket knowledge required.
+
+### Two testing scenarios
+
+**Device logic tests** — verify that your `.js` device files respond correctly to events. Only the ble-faker server needs to be running. No React Native app, no Metro, no `BLE_MOCK`.
+
+```ts
+it("increments setpoint on KEYBOARD up", async () => {
+  const device = ns.device("ff-00-11-22-33-02");
+  await device.input("temperature", "98");
+  await device.waitForChar(STATUS_UUID, /.+/);
+});
+```
+
+**Full-stack tests** — the React Native app runs with `BLE_MOCK=true` (driven by Detox, Maestro, or similar), while the test client controls the device side at the same time. For example, Detox taps a button in the app while your test advances the simulated clock:
+
+```ts
+it("shows updated temperature after device tick", async () => {
+  const device = ns.device("ff-00-11-22-33-02");
+  await detox.element(by.id("connectBtn")).tap();
+  await device.tickN(60);                        // advance 1 simulated minute
+  await expect(detox.element(by.id("temp"))).toHaveText("99°F");
+});
+```
+
+### Setup
+
+```ts
+import { BleTestClient } from "ble-faker/test";
+import { before, after, describe, it } from "node:test";
+
+describe("heart rate monitor", () => {
+  const client = BleTestClient.connect(); // reads running server from ~/.ble-faker-server.json
+  let ns: Awaited<ReturnType<typeof client.mount>>;
+
+  before(async () => {
+    ns = await client.mount({ dir: "./mocks", label: "HR test" });
+  });
+
+  after(async () => {
+    await client.unmount(ns);
+  });
+
+  it("pushes a heart rate characteristic on each tick", async () => {
+    const device = ns.device("ff-00-11-22-33-02");
+    await device.tickN(1);
+    await device.waitForChar("2a37", /.+/);
+  });
+});
+```
+
+### Controlling the device
+
+| Method                          | Description                                      |
+| ------------------------------- | ------------------------------------------------ |
+| `device.input(name, payload)`   | Simulate a browser UI form submission            |
+| `device.tickN(n)`               | Advance the device clock by `n` ticks (max 100) |
+| `device.forceDisconnect()`      | Trigger a simulated BLE disconnection            |
+
+### Asserting
+
+Both methods throw an `AssertionError` (from `node:assert`) on timeout — no manual `assert` call needed. `pattern` can be a string (exact match) or a `RegExp`. Default timeout is 5000ms.
+
+Both also check the current value immediately — if it already matches when called, they return right away.
+
+| Method                                           | Description                                    |
+| ------------------------------------------------ | ---------------------------------------------- |
+| `device.waitForOutput(name, pattern, timeout?)`  | Wait until a browser output field matches      |
+| `device.waitForChar(uuid, pattern, timeout?)`    | Wait until a characteristic value matches      |
+
+### Inspecting last seen values
+
+After any `waitFor*` call — including ones that timed out and threw — the last observed value is accessible:
+
+```ts
+try {
+  await device.waitForOutput("mmode_out", "M", 3000);
+} catch (e) {
+  console.log(device.lastOutput("mmode_out")); // e.g. "B" — what was actually seen
+  throw e;
+}
+```
+
+| Method                      | Description                                |
+| --------------------------- | ------------------------------------------ |
+| `device.lastOutput(name)`   | Last value seen for a browser output field |
+| `device.lastChar(uuid)`     | Last value seen for a characteristic       |
+
+### Running the server in CI
+
+```yaml
+# GitHub Actions example
+- name: Start ble-faker
+  run: npx ble-faker --port 58083 &
+
+- name: Run tests
+  run: npm test
+
+- name: Stop ble-faker
+  run: npx ble-faker stop
+  if: always()
+```
+
+---
+
 ## Programmatic API
 
 Embed the server in your own tooling or integration tests:
