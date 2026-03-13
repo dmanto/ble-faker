@@ -1,0 +1,10 @@
+% view.layout = 'default';
+% const token = ctx.stash['token'];
+% if (token) {
+<h1>Namespace not found</h1>
+<p class="meta">Token <code><%= token %></code> does not exist or has been unmounted.</p>
+% } else {
+<h1>Page not found</h1>
+<p class="meta"><code><%= ctx.req.method %> <%= ctx.req.path %></code></p>
+% }
+<p><a href="<%= ctx.urlFor('index_root') %>">&larr; Back to namespaces</a></p>

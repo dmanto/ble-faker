@@ -10,6 +10,7 @@
       <div class="device" data-id="<%= device.id %>" data-ws="<%= device.wsUrl %>">
         <h2><span class="status" id="status-<%= device.id %>"></span><span id="name-<%= device.id %>"><%= device.name %></span></h2>
         <div class="device-id"><%= device.id %></div>
+        <div class="sys-controls" id="sys-<%= device.id %>"></div>
         <div class="controls" id="controls-<%= device.id %>">
           <span class="no-controls">connecting&hellip;</span>
         </div>
@@ -55,7 +56,6 @@
       form.addEventListener('submit', (e) => {
         e.preventDefault();
         ws.send(JSON.stringify({ type: 'input', id: ctrl.name, payload: input.value }));
-        input.value = '';
       });
       container.appendChild(form);
     }
@@ -65,6 +65,7 @@
     const id = el.dataset.id;
     const wsUrl = el.dataset.ws;
     const controls = document.getElementById('controls-' + id);
+    const sysControls = document.getElementById('sys-' + id);
     const statusDot = document.getElementById('status-' + id);
     let ws;
 
@@ -73,6 +74,46 @@
 
       ws.onopen = () => {
         statusDot.classList.add('connected');
+
+        // Reset disconnect button on (re)connect — bridge status unknown until event arrives.
+        const discBtn = document.getElementById('disc-' + id);
+        if (discBtn) discBtn.disabled = true;
+
+        // Build system controls once; survive WS reconnects.
+        if (!sysControls.dataset.built) {
+          sysControls.dataset.built = '1';
+
+          const tickForm = document.createElement('form');
+          tickForm.className = 'sys-form';
+          const tickLabel = document.createElement('span');
+          tickLabel.className = 'sys-label';
+          tickLabel.textContent = 'Tick:';
+          const tickInput = document.createElement('input');
+          tickInput.type = 'number';
+          tickInput.value = '1';
+          tickInput.min = '1';
+          tickInput.max = '100';
+          tickInput.className = 'sys-tick-input';
+          const tickBtn = document.createElement('button');
+          tickBtn.type = 'submit';
+          tickBtn.textContent = 'Tick N';
+          tickForm.append(tickLabel, tickInput, tickBtn);
+          tickForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            ws.send(JSON.stringify({ type: 'tickN', count: Number(tickInput.value) || 1 }));
+          });
+          sysControls.appendChild(tickForm);
+
+          const newDiscBtn = document.createElement('button');
+          newDiscBtn.id = 'disc-' + id;
+          newDiscBtn.className = 'sys-btn-disconnect';
+          newDiscBtn.textContent = 'Force Disconnect';
+          newDiscBtn.disabled = true;
+          newDiscBtn.addEventListener('click', () => {
+            ws.send(JSON.stringify({ type: 'forceDisconnect' }));
+          });
+          sysControls.appendChild(newDiscBtn);
+        }
       };
 
       ws.onclose = () => {
@@ -90,6 +131,9 @@
         } else if (msg.type === 'set') {
           const field = controls.querySelector('[data-out="' + msg.fieldName + '"]');
           if (field) field.textContent = msg.value;
+        } else if (msg.type === 'bridgeStatus') {
+          const discBtn = document.getElementById('disc-' + id);
+          if (discBtn) discBtn.disabled = !msg.connected;
         }
       };
     }
@@ -103,9 +147,18 @@
     .devices { display: flex; flex-direction: column; gap: 1.5rem; }
     .device { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 1.25rem 1.5rem; }
     .device h2 { margin: 0 0 0.2rem; font-size: 1rem; }
-    .device-id { color: #888; font-size: 0.8rem; margin-bottom: 1rem; }
+    .device-id { color: #888; font-size: 0.8rem; margin-bottom: 0.75rem; }
     .status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ccc; margin-right: 6px; vertical-align: middle; }
     .status.connected { background: #22c55e; }
+    .sys-controls { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid #f0f0f0; min-height: 2rem; }
+    .sys-form { display: flex; align-items: center; gap: 0.5rem; }
+    .sys-label { color: #555; }
+    .sys-tick-input { font-family: monospace; font-size: 0.9rem; border: 1px solid #ccc; border-radius: 3px; padding: 0.2rem 0.4rem; width: 4rem; }
+    .sys-form button { font-family: monospace; font-size: 0.9rem; background: #6b7280; color: #fff; border: none; border-radius: 3px; padding: 0.25rem 0.75rem; cursor: pointer; }
+    .sys-form button:hover { background: #4b5563; }
+    .sys-btn-disconnect { font-family: monospace; font-size: 0.9rem; background: #ef4444; color: #fff; border: none; border-radius: 3px; padding: 0.25rem 0.75rem; cursor: pointer; }
+    .sys-btn-disconnect:hover:not(:disabled) { background: #dc2626; }
+    .sys-btn-disconnect:disabled { opacity: 0.4; cursor: not-allowed; }
     .controls { display: flex; flex-direction: column; gap: 0.75rem; }
     .out-row { display: flex; align-items: baseline; gap: 0.5rem; }
     .out-label { color: #555; }

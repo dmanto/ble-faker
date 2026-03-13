@@ -250,10 +250,24 @@ export class BleManager extends MockManager {
             msg.value,
           );
         } else if (msg.type === "disconnect") {
-          this.simulateDeviceDisconnection(
-            deviceId,
-            new Error("Simulated disconnection"),
-          );
+          const disconnectError = new Error("Device was disconnected");
+          this.simulateDeviceDisconnection(deviceId, disconnectError);
+          // The mock library only fires connectionListeners on simulateDeviceDisconnection;
+          // it does not error out characteristic monitors. The app detects disconnection via
+          // monitor errors containing "was disconnected", so we trigger those explicitly.
+          const charMap = this._charServiceMap.get(deviceId);
+          if (charMap) {
+            const [charUUID, serviceUUID] = charMap.entries().next().value ?? [];
+            if (charUUID && serviceUUID) {
+              this.simulateCharacteristicError(
+                deviceId,
+                serviceUUID,
+                charUUID,
+                disconnectError,
+              );
+            }
+          }
+          this._closeBridge(deviceId);
         } else if (msg.type === "readError" && msg.uuid) {
           const charUUID = msg.uuid.toLowerCase();
           const serviceUUID = this._charServiceMap.get(deviceId)?.get(charUUID);

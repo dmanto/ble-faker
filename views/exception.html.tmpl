@@ -1,0 +1,7 @@
+% view.layout = 'default';
+<h1>Something went wrong</h1>
+% const err = ctx.stash['exception'];
+% if (err) {
+<p class="meta"><%= err instanceof Error ? err.message : String(err) %></p>
+% }
+<p><a href="<%= ctx.urlFor('index_root') %>">&larr; Back to namespaces</a></p>

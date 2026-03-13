@@ -18,6 +18,7 @@ export interface DeviceEntry {
   jsFilePath: string;
   state: DeviceState;
   events: EventEmitter;
+  bridgeOpen?: boolean;
 }
 
 export function sanitizeDeviceId(raw: string): string {

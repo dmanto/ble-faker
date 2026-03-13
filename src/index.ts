@@ -4,7 +4,7 @@ import fs from "node:fs";
 import { STATE_FILE } from "./server-control.js";
 import Namespaces from "./models/namespaces.js";
 
-export const app: MojoApp = mojo();
+export const app: MojoApp = mojo({ mode: "production" });
 app.log.formatter = Logger.systemdFormatter;
 app.log.level = "trace";
 app.plugin(registerPlugins);

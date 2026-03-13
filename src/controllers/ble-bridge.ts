@@ -47,6 +47,10 @@ export default class BleBridgeController {
         }
       };
 
+      ctx.log.info(`[device:${entry.id}] bridge connected`);
+      entry.bridgeOpen = true;
+      entry.events.emit("bridgeConnected");
+
       // Let device logic react to the new connection (session state, UI tweaks, etc.).
       runEvent({ kind: "connect" });
       entry.events.emit("ui", entry.state.ui);
@@ -74,19 +78,43 @@ export default class BleBridgeController {
       }) => runEvent({ kind: "input", id: fieldId, payload });
       entry.events.on("input", onInput);
 
+      const onTickN = ({ count }: { count: number }) => {
+        const n = Math.max(0, Math.min(count, 100));
+        for (let i = 0; i < n; i++) runEvent({ kind: "tick" });
+      };
+      entry.events.on("tickN", onTickN);
+
+      const onForceDisconnect = () => {
+        ctx.log.info(`[device:${entry.id}] ble-bridge: sending disconnect to app`);
+        ws.send({ type: "disconnect" }).catch(() => {});
+      };
+      entry.events.once("forceDisconnect", onForceDisconnect);
+
       const onRemove = () => ws.close();
       entry.events.once("remove", onRemove);
 
       for await (const msg of ws) {
         if (typeof msg !== "object" || msg === null) continue;
-        const { uuid = "", payload = "" } = msg as Record<string, string>;
+        const m = msg as Record<string, unknown>;
+        if (m["type"] === "tickN") {
+          const count = typeof m["count"] === "number" ? m["count"] : 0;
+          entry.events.emit("tickN", { count });
+          continue;
+        }
+        const { uuid = "", payload = "" } = m as Record<string, string>;
         runEvent({ kind: "notify", uuid, payload });
       }
 
       clearInterval(ticker);
       entry.events.off("reload", onReload);
       entry.events.off("input", onInput);
+      entry.events.off("tickN", onTickN);
+      entry.events.off("forceDisconnect", onForceDisconnect);
       entry.events.off("remove", onRemove);
+
+      ctx.log.info(`[device:${entry.id}] bridge disconnected`);
+      entry.bridgeOpen = false;
+      entry.events.emit("bridgeDisconnected");
 
       // WS is closed — run disconnect so device logic can clean up state.vars.
       // Char/bridge messages have nowhere to go but vars updates still persist.
