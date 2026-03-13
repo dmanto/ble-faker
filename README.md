@@ -4,30 +4,26 @@
 [![npm](https://img.shields.io/npm/v/ble-faker)](https://www.npmjs.com/package/ble-faker)
 [![License: MIT](https://img.shields.io/npm/l/ble-faker)](https://github.com/dmanto/ble-faker/blob/main/LICENSE)
 
-Scriptable BLE peripheral simulator for React Native developers. Run realistic hardware simulations on your dev machine — no physical devices required.
+Scriptable BLE peripheral simulator for React Native developers. Define your hardware's behavior in JavaScript, connect your app to it — no physical device required.
 
 ---
 
-## The problem
+## Why ble-faker?
 
-Building React Native apps that talk to BLE hardware is slow and fragile to test:
+If you're building a React Native app that talks to BLE hardware, you've probably felt this pain:
 
-- You need a physical device on hand to verify any change
-- Bugs that only appear on specific hardware models or firmware versions are hard to reproduce
-- AI-assisted development moves fast, but every "does this work?" still means reaching for a sensor
-- Demos, CI runs, and code reviews can't easily include live hardware
+- You need the physical device nearby for every change you want to test
+- The device has limited availability, limited firmware control, or both
+- Automated tests and CI runs can't include live hardware
+- Demoing to stakeholders means praying the device cooperates
 
-**ble-faker** solves this by running a local BLE peripheral server that your app connects to instead of real hardware. You define device behavior in plain JavaScript — edit a file, see the change in your app.
+**ble-faker** replaces the physical device on your dev machine. Your app code stays unchanged — the same `react-native-ble-plx` calls that talk to real hardware talk to ble-faker instead. You get a browser dashboard to watch characteristic values change in real time and inject inputs without touching the app.
 
 ---
 
-## How it works
+## Your app code stays the same
 
-1. Create a **category folder** with a `gatt-profile.json` describing the GATT structure
-2. Add one or more **device files** named by MAC address (e.g. `FF-00-11-22-33-02.js`) containing simulation logic
-3. Start the server — it exposes the devices to your React Native app via the mock bridge
-
-Just `touch FF-00-11-22-33-02.js` to get a working device with no code: characteristics are auto-wired as inputs/outputs from the profile, with an ESP32-style default name.
+The key point: ble-faker ships a drop-in replacement for `react-native-ble-plx`. You configure Metro to redirect the import — that's it. Every `connectToDevice`, `monitorCharacteristicForService`, and `writeCharacteristicWithResponseForService` call in your app works exactly as before, against simulated hardware.
 
 ---
 
@@ -36,6 +32,8 @@ Just `touch FF-00-11-22-33-02.js` to get a working device with no code: characte
 ### 1. Install
 
 ```shell
+npm install --save-dev ble-faker
+# or
 pnpm add -D ble-faker
 ```
 
@@ -43,19 +41,18 @@ pnpm add -D ble-faker
 
 ```text
 mocks/
-└── heart-rate-monitors/
-    ├── gatt-profile.json
-    └── FF-00-11-22-33-02.js
+└── heart-rate-monitors/     ← category folder (one per device type)
+    ├── gatt-profile.json    ← GATT structure
+    └── FF-00-11-22-33-02.js ← device logic, named by MAC address
 ```
 
-**`gatt-profile.json`** — the GATT structure, mirrors the `addMockDevice()` payload:
+**`gatt-profile.json`** — mirrors the `addMockDevice()` payload from `react-native-ble-plx-mock`:
 
 ```json
 {
   "serviceUUIDs": ["180D"],
   "isConnectable": true,
   "mtu": 247,
-  "manufacturerData": "SGVsbG8gTW9qbw==",
   "services": [
     {
       "uuid": "180D",
@@ -68,24 +65,28 @@ mocks/
 }
 ```
 
-**`FF-00-11-22-33-02.js`** — device logic (or `touch` it for auto-generated defaults):
+**`FF-00-11-22-33-02.js`** — device logic:
 
 ```js
 export default function (state, event) {
   if (event.kind === "start") {
     return [
       { name: "HR Monitor", rssi: -65 },
-      { out: [{ name: "2A37", label: "Heart Rate" }] },
-      { in: [{ name: "2A39", label: "Reset" }] },
+      { vars: { hr: 72 } },
+      { out: [{ name: "bpm", label: "Heart Rate (bpm)" }] },
     ];
   }
 
   if (event.kind === "tick") {
-    const hr = state.vars.hr ?? 72;
-    return [["2A37", utils.packUint16(hr)], { set: { "2A37": String(hr) } }];
+    const hr = Number(state.vars.hr);
+    return [
+      ["2A37", utils.packUint16(hr)],
+      { set: { bpm: String(hr) } },
+    ];
   }
 
-  if (event.kind === "input" && event.id === "2A39") {
+  if (event.kind === "notify" && event.uuid === "2A39") {
+    // App wrote to the control point — reset heart rate
     return [{ vars: { hr: 72 } }];
   }
 
@@ -93,93 +94,168 @@ export default function (state, event) {
 }
 ```
 
-### 3. Start the server
+> **No code at all?** Just `touch FF-00-11-22-33-02.js`. ble-faker auto-generates browser controls from the GATT profile — output fields for readable/notifiable characteristics, input fields for writable ones. Good enough to verify your profile is wired up correctly before you write any logic.
 
-```shell
-npx ble-faker --dir ./mocks --port 58083
-```
+### 3. Configure Metro
 
-### 4. Open the browser dashboard
-
-Navigate to `http://localhost:58083` to see the namespace index, then click through to a namespace dashboard. Each device shows its live UI controls — output fields update in real time as the tick event fires, and input fields let you send values to the device logic without touching the app.
-
----
-
-## Device Logic
-
-Each `.js` file exports a single default function. It receives the current `state` and an `event`, returns an array of commands:
+In your `metro.config.js`, add the ble-faker mock redirect under a `BLE_MOCK` env flag:
 
 ```js
-export default function (state, event) {
-  // state.dev   — full GATT profile (read-only; includes services array)
-  // state.vars  — your persisted values from previous calls (read-only)
-  // state.chars — current characteristic values by UUID { uuid: base64 }
-  // state.ui    — current browser UI controls { ins, outs }
-  return [...commands];
+const { getDefaultConfig } = require("expo/metro-config"); // or @react-native/metro-config
+const path = require("path");
+const fs = require("fs");
+
+const config = getDefaultConfig(__dirname);
+
+if (process.env.BLE_MOCK === "true") {
+  // Read the port from the running server's state file
+  let bleFakerPort = 58083;
+  try {
+    const state = JSON.parse(
+      fs.readFileSync(path.join(process.env.HOME, ".ble-faker-server.json"), "utf8")
+    );
+    if (state.port) bleFakerPort = state.port;
+  } catch {}
+
+  // Where your mock folder lives (parent of category folders)
+  const mockDir  = path.join(__dirname, "mocks");
+  const mockLabel = "My App";
+
+  // Resolve the ble-faker package root
+  const bleFakerRoot = path.dirname(require.resolve("ble-faker/package.json"));
+
+  config.watchFolders = [...(config.watchFolders ?? []), bleFakerRoot];
+
+  // Serve config to the mock library
+  config.server = {
+    ...config.server,
+    enhanceMiddleware: (middleware) => (req, res, next) => {
+      if (req.url === "/ble-faker-config") {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ port: bleFakerPort, dir: mockDir, label: mockLabel }));
+        return;
+      }
+      middleware(req, res, next);
+    },
+  };
+
+  // Redirect react-native-ble-plx → ble-faker mock
+  const originalResolve = config.resolver.resolveRequest;
+  config.resolver.resolveRequest = (context, moduleName, platform) => {
+    if (moduleName === "react-native-ble-plx") {
+      return { filePath: path.join(bleFakerRoot, "dist/mock.js"), type: "sourceFile" };
+    }
+    if (context.originModulePath.startsWith(bleFakerRoot)) {
+      return (originalResolve ?? context.resolveRequest)(
+        { ...context, originModulePath: __filename },
+        moduleName,
+        platform
+      );
+    }
+    return (originalResolve ?? context.resolveRequest)(context, moduleName, platform);
+  };
+}
+
+module.exports = config;
+```
+
+### 4. Add scripts to your `package.json`
+
+```json
+"scripts": {
+  "ble:start":  "ble-faker --port 58083",
+  "ble:stop":   "ble-faker stop",
+  "start:mock": "cross-env BLE_MOCK=true expo start"
 }
 ```
 
-State is **read-only** inside the function — direct writes (`state.hr = 42`) are silently discarded. Use `{ vars: { hr: 42 } }` to persist values.
+`cross-env` handles the env var on Windows — add it with `npm install --save-dev cross-env`.
 
-### Events
+### 5. Start the server
 
-| `event.kind` | when                                                      |
-| ------------ | --------------------------------------------------------- |
-| `start`      | every new BLE bridge connection (also warms up on load)   |
-| `tick`       | periodic timer                                            |
-| `reload`     | logic file changed on disk                                |
-| `advertise`  | server building the advertising packet                    |
-| `notify`     | characteristic notification — `uuid` + `payload` (base64) |
-| `input`      | browser UI field submitted — `id` + `payload`             |
+```shell
+npm run ble:start
+```
 
-### Return commands
+### 6. Run your app with the mock enabled
 
-| Shape                         | Effect                                                        |
-| ----------------------------- | ------------------------------------------------------------- |
-| `['2A37', base64]`            | Update a GATT characteristic value                            |
-| `{ name, rssi, … }`           | Patch the advertising packet (any `Partial<Device>` field)    |
-| `{ in: [{ name, label }] }`   | Define browser input controls (text + submit → `input` event) |
-| `{ out: [{ name, label }] }`  | Define browser output display fields                          |
-| `{ set: { field: 'value' } }` | Push a string to a named output field via WebSocket           |
-| `{ vars: { key: value } }`    | Persist values into `state.vars` for the next call            |
+```shell
+npm run start:mock
+```
 
-### Available globals (no imports needed)
+Restart Metro (not just reload) whenever you change `metro.config.js`.
 
-| Global                   | Description                              |
-| ------------------------ | ---------------------------------------- |
-| `Buffer`                 | Node.js Buffer                           |
-| `Uint8Array`, `DataView` | Binary views                             |
-| `utils.toBase64(arr)`    | `Uint8Array → base64 string`             |
-| `utils.fromBase64(str)`  | `base64 → Buffer`                        |
-| `utils.packUint16(n)`    | little-endian uint16 → base64            |
-| `console.log/warn/error` | captured and forwarded to the browser UI |
+### 7. Open the browser dashboard
 
-### Sandbox security
-
-Logic files run in an isolated `node:vm` context. They cannot access `process`, `require`, the filesystem, or the network. They are pure functions that safely simulate hardware state transitions.
+`http://localhost:58083` — lists all namespaces. Click through to a device to see its live output fields and interact with it via input controls.
 
 ---
 
-## Default behavior (empty `.js` file)
+## Device Logic Reference
 
-`touch FF-00-11-22-33-02.js` gives you a working device without any code:
+### Events
 
-- **Device name**: `ESP32_` + last 5 hex chars of the MAC address
-- **RSSI**: −65 dBm
-- Characteristics with `read`/`notify` → browser output fields, labeled from the standard GATT table
-- Characteristics with `write` → browser input fields
+| `event.kind` | When                                                                               | Extra fields               |
+| ------------ | ---------------------------------------------------------------------------------- | -------------------------- |
+| `start`      | Namespace created or device file saved. Use to initialize `state.vars`.            | —                          |
+| `connect`    | App establishes a BLE connection                                                   | —                          |
+| `disconnect` | BLE connection closes. `vars` updates persist; char updates are discarded.         | —                          |
+| `tick`       | 1-second timer — only fires while a connection is open                             | —                          |
+| `advertise`  | Server building the device list for the app's scan                                 | —                          |
+| `notify`     | App wrote to a characteristic                                                      | `uuid`, `payload` (base64) |
+| `input`      | Browser UI form submitted                                                          | `id`, `payload` (string)   |
 
-Use this to verify your profile is correct, then add logic as needed.
+### Return commands
+
+| Shape                                | Effect                                                        |
+| ------------------------------------ | ------------------------------------------------------------- |
+| `['uuid', base64]`                   | Push a characteristic value to the app                        |
+| `{ name, rssi, … }`                  | Patch the advertising packet (`Partial<Device>` fields)       |
+| `{ vars: { key: value } }`           | Persist values into `state.vars` for the next call            |
+| `{ in: [{ name, label }] }`          | Define browser input controls                                 |
+| `{ out: [{ name, label }] }`         | Define browser output display fields                          |
+| `{ set: { field: 'value' } }`        | Push a string to a named browser output field                 |
+| `{ disconnect: true }`               | Simulate a device disconnection                               |
+| `{ readError: { uuid } }`            | Make the app's next characteristic read for `uuid` fail       |
+| `{ clearReadError: { uuid } }`       | Clear a previously set read error                             |
+
+### State
+
+| Field        | Type                          | Description                                          |
+| ------------ | ----------------------------- | ---------------------------------------------------- |
+| `state.dev`  | `Partial<Device>`             | Device advertising info (includes `id` as MAC)       |
+| `state.vars` | `Record<string, unknown>`     | Your persisted values — read-only, write via `vars:` |
+| `state.chars`| `Record<string, string>`      | Current characteristic values by UUID (base64)       |
+| `state.ui`   | `{ ins, outs }`               | Current browser UI definition                        |
+
+### Available globals
+
+No imports needed inside device logic files:
+
+| Global                   | Description                               |
+| ------------------------ | ----------------------------------------- |
+| `Buffer`                 | Node.js Buffer                            |
+| `Uint8Array`, `DataView` | Binary views                              |
+| `utils.toBase64(arr)`    | `Uint8Array → base64 string`              |
+| `utils.fromBase64(str)`  | `base64 → Buffer`                         |
+| `utils.packUint16(n)`    | little-endian uint16 → base64             |
+| `console.log/warn/error` | forwarded to server stdout                |
+
+### Sandbox
+
+Logic files run in an isolated `node:vm` context with a 50ms CPU budget per call. No access to `process`, `require`, the filesystem, or the network.
 
 ---
 
 ## Programmatic API
 
+Embed the server in your own tooling or integration tests:
+
 ```ts
 import { bleMockServer } from "ble-faker";
 
 await bleMockServer.start({ dir: "./mocks", port: 58083 });
-const info = await bleMockServer.get(); // { version, dir }
+const { pid, url, port } = await bleMockServer.get();
 await bleMockServer.stop();
 ```
 
