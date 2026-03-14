@@ -1,7 +1,7 @@
 {
   "name": "ble-faker",
   "type": "module",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Scriptable BLE simulation toolchain for React Native development",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -23,7 +23,8 @@
     },
     "./device": {
       "types": "./dist/device.d.ts"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
