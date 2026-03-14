@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.0.0] - 2026-03-14
+
+### Added
+
+- **`connect` / `disconnect` events** — device logic now receives a `connect` event on every new BLE bridge connection and a `disconnect` event when the bridge closes. Variables written during a session persist across reconnects.
+- **`start` event redefined as NVM init** — `start` fires once on namespace creation and again on file change (hot-reload). `state.vars` is always empty at `start` time, making it the right place to initialise persistent state.
+- **Console log forwarding** — `console.log` / `console.warn` / `console.error` calls inside device logic are forwarded to the ble-faker server's stdout, prefixed with the device ID.
+- **Test client (`ble-faker/test`)** — `BleTestClient`, `BleNamespace`, and `BleDevice` classes for automated integration testing of device logic. Methods: `input`, `tickN`, `forceDisconnect`, `waitForOutput`, `waitForChar`, `lastOutput`, `lastChar`.
+- **`forceDisconnect` command** — device logic can return `{ disconnect: true }` to simulate a BLE disconnection from the device side.
+- **`readError` / `clearReadError` commands** — device logic can simulate characteristic read errors for specific UUIDs.
+- **`ble-faker/device` types subpath** — TypeScript types for device event payloads and return values; import in device files for IDE autocompletion without runtime cost.
+- **Expanded sandbox utilities** — `TextEncoder` / `TextDecoder` available inside device logic VM sandbox.
+- **Platform-correct advertised device IDs** — mock exposes Android-style (`AA:BB:CC:DD:EE:FF`) and iOS-style (`XXXXXXXX-XXXX-4000-8000-XXXXXXXXXXXX`) IDs to app code automatically.
+- **Metro host auto-detection** — mock reads the Metro dev server host via `expo-constants` so it works correctly on real devices (not just simulators).
+- **Favicon** for the browser dashboard.
+- **Full README** — Getting Started guide, Metro config instructions, Device Logic Reference, and Testing section.
+
+### Changed
+
+- **Explicit char commands are always sent** — returning `['uuid', base64]` from device logic now broadcasts the value unconditionally, without diffing against the previous value. Ensures the app always receives the intended notification.
+- Proactive char push on bridge connect removed; device logic controls all characteristic updates explicitly.
+- Production mode enabled by default for the mojo.js app.
+
+### Fixed
+
+- Mock: stale WebSocket bridge no longer clobbers a newly opened bridge on reconnect.
+- Mock: `stop` command correctly cleans up the PID state file on Windows after `taskkill`.
+- Favicon served via `ctx.urlForFile` so the `public/` directory resolves correctly under the `/static/` prefix.
+
 ## [0.1.1] - 2026-03-08
 
 ### Added
