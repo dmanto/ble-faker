@@ -19,6 +19,8 @@ If you're building a React Native app that talks to BLE hardware, you've probabl
 
 **ble-faker** replaces the physical device on your dev machine. Your app code stays unchanged — the same `react-native-ble-plx` calls that talk to real hardware talk to ble-faker instead. You get a browser dashboard to watch characteristic values change in real time and inject inputs without touching the app.
 
+![ble-faker demo](docs/demo.gif)
+
 ---
 
 ## Your app code stays the same
@@ -79,10 +81,7 @@ export default function (state, event) {
 
   if (event.kind === "tick") {
     const hr = Number(state.vars.hr);
-    return [
-      ["2A37", utils.packUint16(hr)],
-      { set: { bpm: String(hr) } },
-    ];
+    return [["2A37", utils.packUint16(hr)], { set: { bpm: String(hr) } }];
   }
 
   if (event.kind === "notify" && event.uuid === "2A39") {
@@ -112,13 +111,16 @@ if (process.env.BLE_MOCK === "true") {
   let bleFakerPort = 58083;
   try {
     const state = JSON.parse(
-      fs.readFileSync(path.join(process.env.HOME, ".ble-faker-server.json"), "utf8")
+      fs.readFileSync(
+        path.join(process.env.HOME, ".ble-faker-server.json"),
+        "utf8",
+      ),
     );
     if (state.port) bleFakerPort = state.port;
   } catch {}
 
   // Where your mock folder lives (parent of category folders)
-  const mockDir  = path.join(__dirname, "mocks");
+  const mockDir = path.join(__dirname, "mocks");
   const mockLabel = "My App";
 
   // Resolve the ble-faker package root
@@ -132,7 +134,13 @@ if (process.env.BLE_MOCK === "true") {
     enhanceMiddleware: (middleware) => (req, res, next) => {
       if (req.url === "/ble-faker-config") {
         res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ port: bleFakerPort, dir: mockDir, label: mockLabel }));
+        res.end(
+          JSON.stringify({
+            port: bleFakerPort,
+            dir: mockDir,
+            label: mockLabel,
+          }),
+        );
         return;
       }
       middleware(req, res, next);
@@ -143,16 +151,23 @@ if (process.env.BLE_MOCK === "true") {
   const originalResolve = config.resolver.resolveRequest;
   config.resolver.resolveRequest = (context, moduleName, platform) => {
     if (moduleName === "react-native-ble-plx") {
-      return { filePath: path.join(bleFakerRoot, "dist/mock.js"), type: "sourceFile" };
+      return {
+        filePath: path.join(bleFakerRoot, "dist/mock.js"),
+        type: "sourceFile",
+      };
     }
     if (context.originModulePath.startsWith(bleFakerRoot)) {
       return (originalResolve ?? context.resolveRequest)(
         { ...context, originModulePath: __filename },
         moduleName,
-        platform
+        platform,
       );
     }
-    return (originalResolve ?? context.resolveRequest)(context, moduleName, platform);
+    return (originalResolve ?? context.resolveRequest)(
+      context,
+      moduleName,
+      platform,
+    );
   };
 }
 
@@ -195,51 +210,51 @@ Restart Metro (not just reload) whenever you change `metro.config.js`.
 
 ### Events
 
-| `event.kind` | When                                                                               | Extra fields               |
-| ------------ | ---------------------------------------------------------------------------------- | -------------------------- |
-| `start`      | Namespace created or device file saved. Use to initialize `state.vars`.            | —                          |
-| `connect`    | App establishes a BLE connection                                                   | —                          |
-| `disconnect` | BLE connection closes. `vars` updates persist; char updates are discarded.         | —                          |
-| `tick`       | 1-second timer — only fires while a connection is open                             | —                          |
-| `advertise`  | Server building the device list for the app's scan                                 | —                          |
-| `notify`     | App wrote to a characteristic                                                      | `uuid`, `payload` (base64) |
-| `input`      | Browser UI form submitted                                                          | `id`, `payload` (string)   |
+| `event.kind` | When                                                                       | Extra fields               |
+| ------------ | -------------------------------------------------------------------------- | -------------------------- |
+| `start`      | Namespace created or device file saved. Use to initialize `state.vars`.    | —                          |
+| `connect`    | App establishes a BLE connection                                           | —                          |
+| `disconnect` | BLE connection closes. `vars` updates persist; char updates are discarded. | —                          |
+| `tick`       | 1-second timer — only fires while a connection is open                     | —                          |
+| `advertise`  | Server building the device list for the app's scan                         | —                          |
+| `notify`     | App wrote to a characteristic                                              | `uuid`, `payload` (base64) |
+| `input`      | Browser UI form submitted                                                  | `id`, `payload` (string)   |
 
 ### Return commands
 
-| Shape                                | Effect                                                        |
-| ------------------------------------ | ------------------------------------------------------------- |
-| `['uuid', base64]`                   | Push a characteristic value to the app                        |
-| `{ name, rssi, … }`                  | Patch the advertising packet (`Partial<Device>` fields)       |
-| `{ vars: { key: value } }`           | Persist values into `state.vars` for the next call            |
-| `{ in: [{ name, label }] }`          | Define browser input controls                                 |
-| `{ out: [{ name, label }] }`         | Define browser output display fields                          |
-| `{ set: { field: 'value' } }`        | Push a string to a named browser output field                 |
-| `{ disconnect: true }`               | Simulate a device disconnection                               |
-| `{ readError: { uuid } }`            | Make the app's next characteristic read for `uuid` fail       |
-| `{ clearReadError: { uuid } }`       | Clear a previously set read error                             |
+| Shape                          | Effect                                                  |
+| ------------------------------ | ------------------------------------------------------- |
+| `['uuid', base64]`             | Push a characteristic value to the app                  |
+| `{ name, rssi, … }`            | Patch the advertising packet (`Partial<Device>` fields) |
+| `{ vars: { key: value } }`     | Persist values into `state.vars` for the next call      |
+| `{ in: [{ name, label }] }`    | Define browser input controls                           |
+| `{ out: [{ name, label }] }`   | Define browser output display fields                    |
+| `{ set: { field: 'value' } }`  | Push a string to a named browser output field           |
+| `{ disconnect: true }`         | Simulate a device disconnection                         |
+| `{ readError: { uuid } }`      | Make the app's next characteristic read for `uuid` fail |
+| `{ clearReadError: { uuid } }` | Clear a previously set read error                       |
 
 ### State
 
-| Field        | Type                          | Description                                          |
-| ------------ | ----------------------------- | ---------------------------------------------------- |
-| `state.dev`  | `Partial<Device>`             | Device advertising info (includes `id` as MAC)       |
-| `state.vars` | `Record<string, unknown>`     | Your persisted values — read-only, write via `vars:` |
-| `state.chars`| `Record<string, string>`      | Current characteristic values by UUID (base64)       |
-| `state.ui`   | `{ ins, outs }`               | Current browser UI definition                        |
+| Field         | Type                      | Description                                          |
+| ------------- | ------------------------- | ---------------------------------------------------- |
+| `state.dev`   | `Partial<Device>`         | Device advertising info (includes `id` as MAC)       |
+| `state.vars`  | `Record<string, unknown>` | Your persisted values — read-only, write via `vars:` |
+| `state.chars` | `Record<string, string>`  | Current characteristic values by UUID (base64)       |
+| `state.ui`    | `{ ins, outs }`           | Current browser UI definition                        |
 
 ### Available globals
 
 No imports needed inside device logic files:
 
-| Global                   | Description                               |
-| ------------------------ | ----------------------------------------- |
-| `Buffer`                 | Node.js Buffer                            |
-| `Uint8Array`, `DataView` | Binary views                              |
-| `utils.toBase64(arr)`    | `Uint8Array → base64 string`              |
-| `utils.fromBase64(str)`  | `base64 → Buffer`                         |
-| `utils.packUint16(n)`    | little-endian uint16 → base64             |
-| `console.log/warn/error` | forwarded to server stdout                |
+| Global                   | Description                   |
+| ------------------------ | ----------------------------- |
+| `Buffer`                 | Node.js Buffer                |
+| `Uint8Array`, `DataView` | Binary views                  |
+| `utils.toBase64(arr)`    | `Uint8Array → base64 string`  |
+| `utils.fromBase64(str)`  | `base64 → Buffer`             |
+| `utils.packUint16(n)`    | little-endian uint16 → base64 |
+| `console.log/warn/error` | forwarded to server stdout    |
 
 ### Sandbox
 
@@ -269,7 +284,7 @@ it("increments setpoint on KEYBOARD up", async () => {
 it("shows updated temperature after device tick", async () => {
   const device = ns.device("ff-00-11-22-33-02");
   await detox.element(by.id("connectBtn")).tap();
-  await device.tickN(60);                        // advance 1 simulated minute
+  await device.tickN(60); // advance 1 simulated minute
   await expect(detox.element(by.id("temp"))).toHaveText("99°F");
 });
 ```
@@ -302,11 +317,11 @@ describe("heart rate monitor", () => {
 
 ### Controlling the device
 
-| Method                          | Description                                      |
-| ------------------------------- | ------------------------------------------------ |
-| `device.input(name, payload)`   | Simulate a browser UI form submission            |
-| `device.tickN(n)`               | Advance the device clock by `n` ticks (max 100) |
-| `device.forceDisconnect()`      | Trigger a simulated BLE disconnection            |
+| Method                        | Description                                     |
+| ----------------------------- | ----------------------------------------------- |
+| `device.input(name, payload)` | Simulate a browser UI form submission           |
+| `device.tickN(n)`             | Advance the device clock by `n` ticks (max 100) |
+| `device.forceDisconnect()`    | Trigger a simulated BLE disconnection           |
 
 ### Asserting
 
@@ -314,10 +329,10 @@ Both methods throw an `AssertionError` (from `node:assert`) on timeout — no ma
 
 Both also check the current value immediately — if it already matches when called, they return right away.
 
-| Method                                           | Description                                    |
-| ------------------------------------------------ | ---------------------------------------------- |
-| `device.waitForOutput(name, pattern, timeout?)`  | Wait until a browser output field matches      |
-| `device.waitForChar(uuid, pattern, timeout?)`    | Wait until a characteristic value matches      |
+| Method                                          | Description                               |
+| ----------------------------------------------- | ----------------------------------------- |
+| `device.waitForOutput(name, pattern, timeout?)` | Wait until a browser output field matches |
+| `device.waitForChar(uuid, pattern, timeout?)`   | Wait until a characteristic value matches |
 
 ### Inspecting last seen values
 
@@ -332,10 +347,10 @@ try {
 }
 ```
 
-| Method                      | Description                                |
-| --------------------------- | ------------------------------------------ |
-| `device.lastOutput(name)`   | Last value seen for a browser output field |
-| `device.lastChar(uuid)`     | Last value seen for a characteristic       |
+| Method                    | Description                                |
+| ------------------------- | ------------------------------------------ |
+| `device.lastOutput(name)` | Last value seen for a browser output field |
+| `device.lastChar(uuid)`   | Last value seen for a characteristic       |
 
 ### Running the server in CI
 
