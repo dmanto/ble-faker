@@ -1,8 +1,20 @@
 {
   "name": "ble-faker",
   "type": "module",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Scriptable BLE simulation toolchain for React Native development",
+  "keywords": [
+    "ble",
+    "bluetooth",
+    "bluetooth-low-energy",
+    "react-native",
+    "mock",
+    "simulator",
+    "testing",
+    "react-native-ble-plx",
+    "gatt",
+    "expo"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -34,6 +46,7 @@
     "LICENSE",
     "CHANGELOG.md"
   ],
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dmanto/ble-faker.git"

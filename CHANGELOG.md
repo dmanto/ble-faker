@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3] - 2026-03-16
+
+### Fixed
+
+- Added `"license": "MIT"` field to `package.json` so the npm license badge displays correctly.
+- Added `keywords` to `package.json` for better npm discoverability.
+
 ## [1.0.0] - 2026-03-14
 
 ### Added
