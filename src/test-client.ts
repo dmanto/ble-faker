@@ -161,7 +161,10 @@ export class BleNamespace {
   }
 
   /** @internal */
-  static async _create(token: string, devicesUrl: string): Promise<BleNamespace> {
+  static async _create(
+    token: string,
+    devicesUrl: string,
+  ): Promise<BleNamespace> {
     const ns = new BleNamespace(token, devicesUrl);
     await ns.refresh();
     return ns;

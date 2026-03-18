@@ -37,7 +37,9 @@ export default class BleBridgeController {
         }
         entry.state = applied.state;
         for (const msg of applied.wsMessages) {
-          entry.lastOutputValues[msg["fieldName"] as string] = msg["value"] as string;
+          entry.lastOutputValues[msg["fieldName"] as string] = msg[
+            "value"
+          ] as string;
           entry.events.emit("set", msg);
         }
         for (const msg of applied.bridgeMessages) {
@@ -87,7 +89,9 @@ export default class BleBridgeController {
       entry.events.on("tickN", onTickN);
 
       const onForceDisconnect = () => {
-        ctx.log.info(`[device:${entry.id}] ble-bridge: sending disconnect to app`);
+        ctx.log.info(
+          `[device:${entry.id}] ble-bridge: sending disconnect to app`,
+        );
         ws.send({ type: "disconnect" }).catch(() => {});
       };
       entry.events.once("forceDisconnect", onForceDisconnect);

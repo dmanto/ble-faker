@@ -2,9 +2,7 @@ import type { MojoContext } from "@mojojs/core";
 import type { Namespace } from "../models/namespaces.js";
 import type { DeviceEntry } from "../models/store.js";
 
-function getEntry(
-  ctx: MojoContext,
-): DeviceEntry | undefined {
+function getEntry(ctx: MojoContext): DeviceEntry | undefined {
   const { store } = ctx.stash["ns"] as Namespace;
   const id = String(ctx.stash["id"] ?? "");
   return store.get(id);
@@ -21,7 +19,10 @@ function parseRegex(pattern: string): RegExp | null {
 export default class TestBridgeController {
   async input(ctx: MojoContext): Promise<void> {
     const entry = getEntry(ctx);
-    if (entry === undefined) { await ctx.notFound(); return; }
+    if (entry === undefined) {
+      await ctx.notFound();
+      return;
+    }
 
     const params = await ctx.params();
     const name = String(params.get("name") ?? "");
@@ -32,17 +33,26 @@ export default class TestBridgeController {
 
   async tickN(ctx: MojoContext): Promise<void> {
     const entry = getEntry(ctx);
-    if (entry === undefined) { await ctx.notFound(); return; }
+    if (entry === undefined) {
+      await ctx.notFound();
+      return;
+    }
 
     const params = await ctx.params();
-    const count = Math.max(0, Math.min(parseInt(String(params.get("count") ?? "1"), 10), 100));
+    const count = Math.max(
+      0,
+      Math.min(parseInt(String(params.get("count") ?? "1"), 10), 100),
+    );
     entry.events.emit("tickN", { count });
     await ctx.render({ text: "", status: 204 });
   }
 
   async disconnect(ctx: MojoContext): Promise<void> {
     const entry = getEntry(ctx);
-    if (entry === undefined) { await ctx.notFound(); return; }
+    if (entry === undefined) {
+      await ctx.notFound();
+      return;
+    }
 
     entry.events.emit("forceDisconnect");
     await ctx.render({ text: "", status: 204 });
@@ -50,12 +60,18 @@ export default class TestBridgeController {
 
   async output(ctx: MojoContext): Promise<void> {
     const entry = getEntry(ctx);
-    if (entry === undefined) { await ctx.notFound(); return; }
+    if (entry === undefined) {
+      await ctx.notFound();
+      return;
+    }
 
     const params = await ctx.params();
     const name = String(params.get("name") ?? "");
     const expectedStr = String(params.get("expected") ?? "");
-    const timeoutMs = Math.max(0, parseInt(String(params.get("timeout") ?? "5000"), 10));
+    const timeoutMs = Math.max(
+      0,
+      parseInt(String(params.get("timeout") ?? "5000"), 10),
+    );
 
     const regex = parseRegex(expectedStr);
     if (regex === null) {
@@ -118,12 +134,18 @@ export default class TestBridgeController {
 
   async char(ctx: MojoContext): Promise<void> {
     const entry = getEntry(ctx);
-    if (entry === undefined) { await ctx.notFound(); return; }
+    if (entry === undefined) {
+      await ctx.notFound();
+      return;
+    }
 
     const params = await ctx.params();
     const uuid = String(params.get("uuid") ?? "").toLowerCase();
     const expectedStr = String(params.get("expected") ?? "");
-    const timeoutMs = Math.max(0, parseInt(String(params.get("timeout") ?? "5000"), 10));
+    const timeoutMs = Math.max(
+      0,
+      parseInt(String(params.get("timeout") ?? "5000"), 10),
+    );
 
     const regex = parseRegex(expectedStr);
     if (regex === null) {

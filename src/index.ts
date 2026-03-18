@@ -28,8 +28,14 @@ nsRoutes
   .to("browser-bridge#connect");
 nsRoutes.delete("/").name("remove_namespace").to("namespaces#remove");
 nsRoutes.post("/test/:id").name("post_test_input").to("test-bridge#input");
-nsRoutes.post("/test/:id/tickN").name("post_test_tickn").to("test-bridge#tickN");
-nsRoutes.post("/test/:id/disconnect").name("post_test_disconnect").to("test-bridge#disconnect");
+nsRoutes
+  .post("/test/:id/tickN")
+  .name("post_test_tickn")
+  .to("test-bridge#tickN");
+nsRoutes
+  .post("/test/:id/disconnect")
+  .name("post_test_disconnect")
+  .to("test-bridge#disconnect");
 nsRoutes.get("/test/:id").name("get_test_output").to("test-bridge#output");
 nsRoutes.get("/test/:id/char").name("get_test_char").to("test-bridge#char");
 

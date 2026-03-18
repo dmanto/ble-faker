@@ -63,7 +63,9 @@ export default class BrowserBridgeController {
           });
         } else if (type === "forceDisconnect") {
           if (entry.bridgeOpen) {
-            ctx.log.info(`[device:${entry.id}] browser: forceDisconnect requested`);
+            ctx.log.info(
+              `[device:${entry.id}] browser: forceDisconnect requested`,
+            );
             entry.events.emit("forceDisconnect");
           }
         }
