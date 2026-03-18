@@ -17,7 +17,8 @@ export default class NamespacesController {
     const params = await ctx.params();
     const dir = String(params.get("dir") ?? "./mocks");
     const label = String(params.get("label") ?? dir);
-    const ns = await ctx.models.namespaces.create(dir, label);
+    const disableAutoTick = params.get("disableAutoTick") === "true";
+    const ns = await ctx.models.namespaces.create(dir, label, disableAutoTick);
     await ctx.render({
       json: {
         token: ns.token,

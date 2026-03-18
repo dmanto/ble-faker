@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `disableAutoTick` option on `client.mount()` (and the `POST /mount` body) — when `true`, the 1-second auto-tick interval is not started for that namespace. Use this in automated full-stack tests to keep device state deterministic and driven entirely by `tickN`.
+
 ### Fixed
 
 - Mock: `simulateDeviceDisconnection` removed from the disconnect flow — the app's disconnection detection is driven solely by the characteristic error, which already carries the "was disconnected" message that triggers monitor handlers correctly.

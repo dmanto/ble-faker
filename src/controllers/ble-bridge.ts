@@ -59,8 +59,11 @@ export default class BleBridgeController {
       runEvent({ kind: "connect" });
       entry.events.emit("ui", entry.state.ui);
 
-      const ticker = setInterval(() => runEvent({ kind: "tick" }), TICK_MS);
-      ticker.unref();
+      const { disableAutoTick } = ctx.stash["ns"] as Namespace;
+      const ticker = disableAutoTick
+        ? null
+        : setInterval(() => runEvent({ kind: "tick" }), TICK_MS);
+      ticker?.unref();
 
       // On file change the watcher re-runs start and emits "reload".
       // Push the refreshed chars to the connected app.
@@ -111,7 +114,7 @@ export default class BleBridgeController {
         runEvent({ kind: "notify", uuid, payload });
       }
 
-      clearInterval(ticker);
+      if (ticker !== null) clearInterval(ticker);
       entry.events.off("reload", onReload);
       entry.events.off("input", onInput);
       entry.events.off("tickN", onTickN);

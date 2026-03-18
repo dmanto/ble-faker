@@ -1,0 +1,15 @@
+{
+  "serviceUUIDs": ["1800"],
+  "isConnectable": true,
+  "services": [
+    {
+      "uuid": "1800",
+      "characteristics": [
+        {
+          "uuid": "2A00",
+          "properties": { "read": true, "notify": true }
+        }
+      ]
+    }
+  ]
+}

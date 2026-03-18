@@ -184,8 +184,9 @@ export class BleTestClient {
   async mount({
     dir = "./mocks",
     label,
-  }: { dir?: string; label?: string } = {}): Promise<BleNamespace> {
-    const body = new URLSearchParams({ dir, label: label ?? dir });
+    disableAutoTick = false,
+  }: { dir?: string; label?: string; disableAutoTick?: boolean } = {}): Promise<BleNamespace> {
+    const body = new URLSearchParams({ dir, label: label ?? dir, disableAutoTick: String(disableAutoTick) });
     const res = await fetch(`${this.serverUrl}/mount`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
