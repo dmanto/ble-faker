@@ -266,19 +266,7 @@ Logic files run in an isolated `node:vm` context with a 50ms CPU budget per call
 
 The `ble-faker/test` client gives you a typed API to control simulated devices and assert on their behavior from test code — no HTTP or WebSocket knowledge required.
 
-### Two testing scenarios
-
-**Device logic tests** — verify that your `.js` device files respond correctly to events. Only the ble-faker server needs to be running. No React Native app, no Metro, no `BLE_MOCK`.
-
-```ts
-it("increments setpoint on KEYBOARD up", async () => {
-  const device = ns.device("ff-00-11-22-33-02");
-  await device.input("temperature", "98");
-  await device.waitForChar(STATUS_UUID, /.+/);
-});
-```
-
-**Full-stack tests** — the React Native app runs with `BLE_MOCK=true` (driven by Detox, Maestro, or similar), while the test client controls the device side at the same time. For example, Detox taps a button in the app while your test advances the simulated clock:
+The React Native app runs with `BLE_MOCK=true` (driven by Detox, Maestro, or similar), while the test client controls the device side at the same time. For example, Detox taps a button in the app while your test advances the simulated clock:
 
 ```ts
 it("shows updated temperature after device tick", async () => {
