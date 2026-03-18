@@ -99,6 +99,19 @@ In templates, prefer `tags.formFor()` — it auto-adds `method="POST"` and the `
 
 - **Requirement:** Use `TestUserAgent` from `@mojojs/core` with `node:test` and `node:assert/strict`. Do not add a `tap` dependency.
 - **Setup:** Start the UA inline at the top of the test block (no `before` hook needed). Register cleanup with `t.after(() => ua.stop())` — no `await` inside the callback; `node:test` awaits the returned Promise automatically.
+- **`app.home` for paths:** Use `app.home.child(...)` to resolve paths relative to the project root instead of `path.resolve(path.dirname(fileURLToPath(import.meta.url)), ...)`. It returns a mojo.js `Path` object with file manipulation methods; call `.toString()` when a plain string is needed.
+
+```js
+// preferred
+const FIXTURES = app.home.child("test", "fixtures").toString();
+
+// avoid
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+const FIXTURES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
+```
+
+- **White-box vs black-box setup:** Use `app.models.*` directly when the namespace/store is scaffolding and you need access to internal state (e.g. `entry.events`). Use the UA (POST/DELETE) when the controller behavior itself is what's under test.
 
 ```js
 import { app } from "../index.js";
