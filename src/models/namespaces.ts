@@ -22,7 +22,11 @@ export interface NamespaceSummary {
 export default class Namespaces {
   private _map = new Map<string, Namespace>();
 
-  async create(dir: string, label: string, disableAutoTick = false): Promise<Namespace> {
+  async create(
+    dir: string,
+    label: string,
+    disableAutoTick = false,
+  ): Promise<Namespace> {
     const absDir = path.resolve(dir);
     const token = crypto
       .createHash("sha1")
@@ -37,7 +41,14 @@ export default class Namespaces {
     }
     const store = new Store();
     const watcher = startWatcher(absDir, store);
-    const namespace: Namespace = { token, label, dir: absDir, disableAutoTick, store, watcher };
+    const namespace: Namespace = {
+      token,
+      label,
+      dir: absDir,
+      disableAutoTick,
+      store,
+      watcher,
+    };
     this._map.set(token, namespace);
     return namespace;
   }

@@ -108,7 +108,10 @@ const FIXTURES = app.home.child("test", "fixtures").toString();
 // avoid
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-const FIXTURES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
+const FIXTURES = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "fixtures",
+);
 ```
 
 - **White-box vs black-box setup:** Use `app.models.*` directly when the namespace/store is scaffolding and you need access to internal state (e.g. `entry.events`). Use the UA (POST/DELETE) when the controller behavior itself is what's under test.
