@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.3] - 2026-03-20
+
+### Fixed
+
+- State engine: device logic that returns `undefined` (e.g. a `disconnect` handler with no return) no longer crashes with `SyntaxError: "undefined" is not valid JSON`. Coerced to `[]` before JSON round-trip.
+
 ## [1.1.2] - 2026-03-20
 
 ### Fixed
