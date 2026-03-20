@@ -46,8 +46,8 @@ importers:
         specifier: latest
         version: 3.8.1
       react-native-ble-plx-mock:
-        specifier: ^1.3.1
-        version: 1.3.1(react-native-ble-plx@3.5.1(react-native@0.84.0(@babel/core@7.29.0)(react@19.2.4))(react@19.2.4))
+        specifier: ^1.3.2
+        version: 1.3.2(react-native-ble-plx@3.5.1(react-native@0.84.0(@babel/core@7.29.0)(react@19.2.4))(react@19.2.4))(react@19.2.4)
       typescript:
         specifier: latest
         version: 5.9.3
@@ -2667,9 +2667,10 @@ packages:
   react-is@18.3.1:
     resolution: {integrity: sha512-/LLMVyas0ljjAtoYiPqYiL8VWXzUUdThrmU5+n20DZv+a+ClRoevUzw5JxU+Ieh5/c87ytoTBV9G1FiKfNJdmg==}
 
-  react-native-ble-plx-mock@1.3.1:
-    resolution: {integrity: sha512-vob3iCY/W654D9w6DE2yCyEfFNCTfm6T2fS2RussvkIVNWcP0TjHFgnhUTrl+fjljHSyOiQs0pEzTLabADZinw==}
+  react-native-ble-plx-mock@1.3.2:
+    resolution: {integrity: sha512-duMLUN0VBpuWvaAXhM+bNcxuo9pl9kIQA8GKb6uAE+a83nECfSAsUFZ6ndViM8fZovL6QRP9hl1f1Hy1cwxJyg==}
     peerDependencies:
+      react: '>=18'
       react-native-ble-plx: ^3.x
 
   react-native-ble-plx@3.5.1:
@@ -6246,8 +6247,9 @@ snapshots:
 
   react-is@18.3.1: {}
 
-  react-native-ble-plx-mock@1.3.1(react-native-ble-plx@3.5.1(react-native@0.84.0(@babel/core@7.29.0)(react@19.2.4))(react@19.2.4)):
+  react-native-ble-plx-mock@1.3.2(react-native-ble-plx@3.5.1(react-native@0.84.0(@babel/core@7.29.0)(react@19.2.4))(react@19.2.4))(react@19.2.4):
     dependencies:
+      react: 19.2.4
       react-native-ble-plx: 3.5.1(react-native@0.84.0(@babel/core@7.29.0)(react@19.2.4))(react@19.2.4)
 
   react-native-ble-plx@3.5.1(react-native@0.84.0(@babel/core@7.29.0)(react@19.2.4))(react@19.2.4):

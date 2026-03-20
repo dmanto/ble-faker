@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.2] - 2026-03-20
+
+### Fixed
+
+- Mock: update to react-native-ble-plx-mock@1.3.2 which declares `react` as a peer dependency, preventing React from being bundled inline and ensuring `act()` wrapping uses the correct React instance in RNTL tests.
+
 ## [1.1.1] - 2026-03-20
 
 ### Fixed
