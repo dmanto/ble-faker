@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1] - 2026-03-20
+
+### Fixed
+
+- Mock: wrap characteristic listener callbacks in React `act()` when `IS_REACT_ACT_ENVIRONMENT` is set, eliminating "not wrapped in act()" warnings in RNTL tests (via react-native-ble-plx-mock@1.3.1, closes #6).
+
 ## [1.1.0] - 2026-03-18
 
 ### Added
