@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.4] - 2026-03-22
+
+### Fixed
+
+- Removed unused `lodash` and `jsonpath-plus` from `dependencies` (and their `@types` from `devDependencies`). Neither package is imported anywhere in the source — they were dead entries carried over from early development.
+
 ## [1.3.3] - 2026-03-22
 
 ### Fixed
