@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { AssertionError } from "node:assert";
+import { setMockConfig } from "./mock-config.js";
 
 const STATE_FILE =
   process.env.BLE_FAKER_STATE ??
@@ -20,6 +21,7 @@ interface DeviceInfo {
 interface MountResponse {
   token: string;
   devicesUrl: string;
+  bridgeUrl: string;
 }
 
 export class BleDevice {
@@ -181,6 +183,10 @@ export class BleTestClient {
     return new BleTestClient(state.url);
   }
 
+  static connectTo(url: string): BleTestClient {
+    return new BleTestClient(url);
+  }
+
   async mount({
     dir = "./mocks",
     label,
@@ -201,7 +207,8 @@ export class BleTestClient {
       body: body.toString(),
     });
     if (!res.ok) throw new Error(`mount failed: ${res.status}`);
-    const { token, devicesUrl } = (await res.json()) as MountResponse;
+    const { token, devicesUrl, bridgeUrl } = (await res.json()) as MountResponse;
+    setMockConfig({ devicesUrl, bridgeUrl });
     return BleNamespace._create(token, devicesUrl);
   }
 

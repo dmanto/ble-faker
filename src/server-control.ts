@@ -50,7 +50,10 @@ async function start({ port = 3000 }: { port?: number } = {}): Promise<void> {
   while (Date.now() < deadline) {
     try {
       const res = await fetch(url);
-      if (res.ok) return;
+      // Wait for both the HTTP server and the state file — the onStart hook
+      // that writes the state file may fire slightly after the first HTTP
+      // response, so we poll both conditions together.
+      if (res.ok && fs.existsSync(STATE_FILE)) return;
     } catch {}
     await new Promise<void>((r) => setTimeout(r, 200));
   }

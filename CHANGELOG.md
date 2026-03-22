@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.3.0] - 2026-03-22
+
+### Added
+
+- **`ble-faker/metro`** — `withBleFaker(config, opts)` helper that replaces the 50-line manual Metro config boilerplate with a single call. Handles the `resolveRequest` redirect, the `/ble-faker-config` middleware, and `watchFolders` registration automatically. No-op unless the activation env var (`BLE_MOCK=true` by default) is set, so it is safe to apply unconditionally. Shipped as a CJS file (`dist/metro.cjs`) so it works with `require('ble-faker/metro')` in CommonJS `metro.config.js` files used by both Expo and bare React Native projects.
+- **TypeScript device logic** — documented the `ble-faker/device` types subpath with a `.ts` device file example using `DeviceState` and `DeviceEvent`.
+- **Full sandbox utils table** — README now documents all pack/unpack helpers (`packUint8`, `packInt8`, `packInt16`, `packUint32`, `packFloat32`, `unpackUint8`–`unpackFloat32`) with their byte order and signatures.
+- **RNTL / Jest section** — full step-by-step setup guide for React Native Testing Library integration: `jest.config.js` with `moduleNameMapper`, `globalSetup`/`globalTeardown` files, and an annotated test file example.
+- **`dev:mock` combined script** — documented a single `concurrently`-based script that starts both the ble-faker server and Metro together.
+
+### Fixed
+
+- Mock now emits an actionable error message when Metro does not serve `/ble-faker-config`, including a hint about `BLE_MOCK=true` and `withBleFaker()`.
+
+## [1.2.2] - 2026-03-22
+
+### Fixed
+
+- `mock-config`: replaced `Symbol.for`/`globalThis` with a plain module-level variable. `Symbol.for` is per-realm in V8 — in Jest's `vm.createContext()` sandbox the symbol registry is isolated from the outer process, making cross-module sharing unreliable. Since `dist/mock-config.js` is a proper separate entry point (not inlined by rollup), Jest's module cache guarantees one instance per test file, so a module-level variable is the correct and sufficient mechanism.
+- Moved `react-native-ble-plx` from `dependencies` to `devDependencies`. It is only needed for TypeScript types during ble-faker's own build — app developers already have it installed, and vite marks it as external so it was never bundled. Having it in `dependencies` caused a redundant transitive installation alongside the app's own copy.
+
+## [1.2.1] - 2026-03-21
+
+### Fixed
+
+- `bleMockServer.start()` now waits for the state file (`~/.ble-faker-server.json`) to exist before resolving, not just for the HTTP server to answer. Previously there was a race where the `onStart` hook that writes the state file could fire after the first HTTP response, causing `BleTestClient.connect()` in Jest `globalSetup` to read a missing or stale file.
+
+## [1.2.0] - 2026-03-21
+
+### Added
+
+- **Jest-mode mock injection** — `BleTestClient.mount()` now writes the namespace URLs directly into the mock via a `globalThis`-backed shared channel (`Symbol.for('ble-faker.mock-config')`). In Jest/RNTL tests the mock skips the Metro `/ble-faker-config` fetch and the secondary `/mount` call entirely, eliminating the `global.fetch` monkey-patch previously required in `jest.setup.ts`. The Metro path is unchanged.
+- **`BleTestClient.connectTo(url)`** — static factory that accepts a server URL directly, without reading `~/.ble-faker-server.json`. Useful for tests that start the server programmatically and already know the URL.
+- **`dist/mock-config.js`** — internal shared-state module exposed as a build artifact (not a public `exports` entry) so the `Symbol.for` channel is testable and rollup keeps it as a proper module reference rather than inlining it into each bundle.
+
 ## [1.1.3] - 2026-03-20
 
 ### Fixed

@@ -6,6 +6,8 @@
 
 Scriptable BLE peripheral simulator for React Native developers. Define your hardware's behavior in JavaScript, connect your app to it — no physical device required.
 
+A complete working example lives in the [ble-faker-demo](https://github.com/dmanto/ble-faker-demo) repository.
+
 ---
 
 ## Why ble-faker?
@@ -95,84 +97,54 @@ export default function (state, event) {
 
 > **No code at all?** Just `touch FF-00-11-22-33-02.js`. ble-faker auto-generates browser controls from the GATT profile — output fields for readable/notifiable characteristics, input fields for writable ones. Good enough to verify your profile is wired up correctly before you write any logic.
 
+Device logic files can also be TypeScript. Import `ble-faker/device` for full type coverage (types only, no runtime cost):
+
+```ts
+import type { DeviceEvent, DeviceState } from "ble-faker/device";
+
+export default function (state: DeviceState, event: DeviceEvent) {
+  if (event.kind === "tick") {
+    const hr = Number(state.vars.hr);
+    return [["2A37", utils.packUint16(hr)]];
+  }
+  return [];
+}
+```
+
 ### 3. Configure Metro
 
-In your `metro.config.js`, add the ble-faker mock redirect under a `BLE_MOCK` env flag:
+Add one line to your `metro.config.js` using the `withBleFaker` helper:
+
+**Expo managed workflow:**
 
 ```js
-const { getDefaultConfig } = require("expo/metro-config"); // or @react-native/metro-config
-const path = require("path");
-const fs = require("fs");
+const { getDefaultConfig } = require("expo/metro-config");
+const { withBleFaker } = require("ble-faker/metro");
 
 const config = getDefaultConfig(__dirname);
-
-if (process.env.BLE_MOCK === "true") {
-  // Read the port from the running server's state file
-  let bleFakerPort = 58083;
-  try {
-    const state = JSON.parse(
-      fs.readFileSync(
-        path.join(process.env.HOME, ".ble-faker-server.json"),
-        "utf8",
-      ),
-    );
-    if (state.port) bleFakerPort = state.port;
-  } catch {}
-
-  // Where your mock folder lives (parent of category folders)
-  const mockDir = path.join(__dirname, "mocks");
-  const mockLabel = "My App";
-
-  // Resolve the ble-faker package root
-  const bleFakerRoot = path.dirname(require.resolve("ble-faker/package.json"));
-
-  config.watchFolders = [...(config.watchFolders ?? []), bleFakerRoot];
-
-  // Serve config to the mock library
-  config.server = {
-    ...config.server,
-    enhanceMiddleware: (middleware) => (req, res, next) => {
-      if (req.url === "/ble-faker-config") {
-        res.setHeader("Content-Type", "application/json");
-        res.end(
-          JSON.stringify({
-            port: bleFakerPort,
-            dir: mockDir,
-            label: mockLabel,
-          }),
-        );
-        return;
-      }
-      middleware(req, res, next);
-    },
-  };
-
-  // Redirect react-native-ble-plx → ble-faker mock
-  const originalResolve = config.resolver.resolveRequest;
-  config.resolver.resolveRequest = (context, moduleName, platform) => {
-    if (moduleName === "react-native-ble-plx") {
-      return {
-        filePath: path.join(bleFakerRoot, "dist/mock.js"),
-        type: "sourceFile",
-      };
-    }
-    if (context.originModulePath.startsWith(bleFakerRoot)) {
-      return (originalResolve ?? context.resolveRequest)(
-        { ...context, originModulePath: __filename },
-        moduleName,
-        platform,
-      );
-    }
-    return (originalResolve ?? context.resolveRequest)(
-      context,
-      moduleName,
-      platform,
-    );
-  };
-}
-
-module.exports = config;
+module.exports = withBleFaker(config, { dir: "./mocks", label: "My App" });
 ```
+
+**Bare React Native:**
+
+```js
+const { getDefaultConfig, mergeConfig } = require("@react-native/metro-config");
+const { withBleFaker } = require("ble-faker/metro");
+
+const config = mergeConfig(getDefaultConfig(__dirname), {});
+module.exports = withBleFaker(config, { dir: "./mocks", label: "My App" });
+```
+
+`withBleFaker` is a no-op unless `BLE_MOCK=true` is set in the environment, so it is safe to apply unconditionally.
+
+`withBleFaker` options:
+
+| Option | Default | Description |
+|---|---|---|
+| `dir` | *(required)* | Path to your mocks directory |
+| `label` | `'ble-faker'` | Label shown in the browser dashboard |
+| `port` | from state file | Override the server port (auto-detected from `~/.ble-faker-server.json`) |
+| `env` | `'BLE_MOCK'` | Environment variable name that activates the mock |
 
 ### 4. Add scripts to your `package.json`
 
@@ -180,11 +152,12 @@ module.exports = config;
 "scripts": {
   "ble:start":  "ble-faker --port 58083",
   "ble:stop":   "ble-faker stop",
-  "start:mock": "cross-env BLE_MOCK=true expo start"
+  "start:mock": "cross-env BLE_MOCK=true expo start",
+  "dev:mock":   "concurrently -k \"npm run ble:start\" \"npm run start:mock\""
 }
 ```
 
-`cross-env` handles the env var on Windows — add it with `npm install --save-dev cross-env`.
+`cross-env` and `concurrently` handle Windows env vars and parallel processes — add them with `npm install --save-dev cross-env concurrently`. `dev:mock` starts both the ble-faker server and Metro in one command.
 
 ### 5. Start the server
 
@@ -196,6 +169,8 @@ npm run ble:start
 
 ```shell
 npm run start:mock
+# or start both together:
+npm run dev:mock
 ```
 
 Restart Metro (not just reload) whenever you change `metro.config.js`.
@@ -247,14 +222,28 @@ Restart Metro (not just reload) whenever you change `metro.config.js`.
 
 No imports needed inside device logic files:
 
-| Global                   | Description                   |
-| ------------------------ | ----------------------------- |
-| `Buffer`                 | Node.js Buffer                |
-| `Uint8Array`, `DataView` | Binary views                  |
-| `utils.toBase64(arr)`    | `Uint8Array → base64 string`  |
-| `utils.fromBase64(str)`  | `base64 → Buffer`             |
-| `utils.packUint16(n)`    | little-endian uint16 → base64 |
-| `console.log/warn/error` | forwarded to server stdout    |
+| Global                         | Description                                     |
+| ------------------------------ | ----------------------------------------------- |
+| `Buffer`                       | Node.js Buffer                                  |
+| `Uint8Array`, `DataView`       | Binary views                                    |
+| `TextEncoder`, `TextDecoder`   | Web encoding API                                |
+| `utils.toBase64(arr)`          | `Uint8Array → base64 string`                    |
+| `utils.fromBase64(str)`        | `base64 → Buffer`                               |
+| `utils.packUint8(n)`           | uint8 → base64                                  |
+| `utils.packInt8(n)`            | int8 → base64                                   |
+| `utils.packUint16(n)`          | little-endian uint16 → base64                   |
+| `utils.packInt16(n)`           | little-endian int16 → base64                    |
+| `utils.packUint32(n)`          | little-endian uint32 → base64                   |
+| `utils.packFloat32(n)`         | little-endian IEEE 754 float → base64           |
+| `utils.unpackUint8(b64)`       | base64 → uint8                                  |
+| `utils.unpackInt8(b64)`        | base64 → int8                                   |
+| `utils.unpackUint16(b64)`      | base64 → little-endian uint16                   |
+| `utils.unpackInt16(b64)`       | base64 → little-endian int16                    |
+| `utils.unpackUint32(b64)`      | base64 → little-endian uint32                   |
+| `utils.unpackFloat32(b64)`     | base64 → little-endian IEEE 754 float           |
+| `console.log/warn/error`       | forwarded to server stdout, prefixed by deviceId|
+
+All pack/unpack helpers use little-endian byte order, which is standard for BLE SIG characteristic specifications.
 
 ### Sandbox
 
@@ -264,7 +253,115 @@ Logic files run in an isolated `node:vm` context with a 50ms CPU budget per call
 
 ## Testing
 
-The `ble-faker/test` client gives you a typed API to control simulated devices and assert on their behavior from test code — no HTTP or WebSocket knowledge required.
+ble-faker supports two testing modes depending on how close to the metal you want to test:
+
+- **RNTL / Jest** — render React Native components against the mock, assert on UI state. No simulator required. Fast.
+- **Detox / Maestro** — drive the full app in a simulator or on a device. The test client controls the device side while Detox/Maestro drives the UI side.
+
+### RNTL / Jest
+
+This is the recommended approach for component-level integration tests. The entire test suite runs in Node.js — no simulator, no Metro, no Expo.
+
+#### Install additional dependencies
+
+```shell
+npm install --save-dev @testing-library/react-native jest-expo
+# or pnpm add -D ...
+```
+
+#### `jest.config.js`
+
+```js
+module.exports = {
+  preset: 'jest-expo',
+  globalSetup: './jest.globalSetup.js',
+  globalTeardown: './jest.globalTeardown.js',
+  setupFilesAfterEnv: ['./jest.setup.ts'],
+  moduleNameMapper: {
+    // Redirect react-native-ble-plx → ble-faker mock (same as Metro redirect)
+    '^react-native-ble-plx$': '<rootDir>/node_modules/ble-faker/dist/mock.js',
+    // Allow imports from ble-faker/test in test files
+    '^ble-faker/test$': '<rootDir>/node_modules/ble-faker/dist/test-client.js',
+  },
+  transformIgnorePatterns: [
+    'node_modules/(?!(jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|ble-faker)',
+  ],
+};
+```
+
+#### `jest.globalSetup.js`
+
+```js
+module.exports = async function () {
+  const { bleMockServer } = await import('ble-faker');
+  await bleMockServer.start({ port: 58083 });
+};
+```
+
+#### `jest.globalTeardown.js`
+
+```js
+module.exports = async function () {
+  const { bleMockServer } = await import('ble-faker');
+  bleMockServer.stop();
+};
+```
+
+#### Test file
+
+```ts
+import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { BleTestClient, BleNamespace, BleDevice } from 'ble-faker/test';
+import { App } from '../src/App';
+
+const MOCKS_DIR = path.join(__dirname, '../mocks');
+const DEVICE_ID = 'ff-00-11-22-33-02';
+
+let client: BleTestClient;
+let ns: BleNamespace;
+let device: BleDevice;
+
+beforeAll(async () => {
+  client = BleTestClient.connect(); // reads running server from ~/.ble-faker-server.json
+  ns = await client.mount({
+    dir: MOCKS_DIR,
+    label: 'rntl-test',
+    disableAutoTick: true, // drive the clock explicitly for deterministic tests
+  });
+  device = ns.device(DEVICE_ID);
+});
+
+afterAll(async () => {
+  await client.unmount(ns);
+});
+
+it('shows updated heart rate after device tick', async () => {
+  render(<App />);
+
+  // Wait for BLE scan to populate the device list
+  await waitFor(() => screen.getByText('HR Monitor'));
+  fireEvent.press(screen.getByText('Connect'));
+
+  // Advance the simulated clock — one tick fires the device's tick handler
+  await device.tickN(1);
+
+  // Assert the characteristic value was pushed to the app
+  await device.waitForChar('2a37', /.+/);
+
+  // Assert the UI reflects the new value
+  await waitFor(() => screen.getByText('72 bpm'));
+});
+```
+
+`client.mount()` with `disableAutoTick: true` stops the 1-second automatic tick, giving you full control over the device clock. Use `device.tickN(n)` to advance it by exactly `n` steps.
+
+#### Key points
+
+- The server starts **once** in `globalSetup` and is shared across all test files — fast startup.
+- `BleTestClient.mount()` writes the namespace URLs directly into the mock's shared module, so the mock skips the Metro discovery step entirely. No `global.fetch` patching required.
+- Each test file mounts its own namespace. Use different `dir` paths for test isolation, or the same `dir` with dedicated device IDs.
+
+### Detox / Maestro
 
 The React Native app runs with `BLE_MOCK=true` (driven by Detox, Maestro, or similar), while the test client controls the device side at the same time. For example, Detox taps a button in the app while your test advances the simulated clock:
 
@@ -277,7 +374,7 @@ it("shows updated temperature after device tick", async () => {
 });
 ```
 
-### Setup
+Setup:
 
 ```ts
 import { BleTestClient } from "ble-faker/test";
@@ -354,6 +451,8 @@ try {
   run: npx ble-faker stop
   if: always()
 ```
+
+For RNTL tests with `globalSetup`/`globalTeardown`, the server lifecycle is managed automatically by Jest — no manual CI step needed.
 
 ---
 

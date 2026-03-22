@@ -94,7 +94,7 @@ export function runDeviceLogic(
       event: DeviceEvent,
     ) => unknown;
     const raw = fn(sandbox.state, sandbox.event);
-    return { result: JSON.parse(JSON.stringify(raw)), logs };
+    return { result: JSON.parse(JSON.stringify(raw ?? [])), logs };
   } catch (err) {
     const message =
       err instanceof Error ? (err.stack ?? err.message) : String(err);

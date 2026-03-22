@@ -23,6 +23,7 @@ export default defineConfig({
         bin: "src/bin.ts",
         mock: "src/mock.ts",
         "test-client": "src/test-client.ts",
+        "mock-config": "src/mock-config.ts",
         ...controllerEntries,
       },
       formats: ["es"],
@@ -37,6 +38,7 @@ export default defineConfig({
         "react-native",
         "react-native-ble-plx",
         "expo-constants",
+        "react",
       ],
       output: {
         banner: (chunk) =>

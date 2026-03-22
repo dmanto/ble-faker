@@ -4,6 +4,7 @@ import type {
   ServiceConfig,
 } from "react-native-ble-plx-mock";
 import { NativeModules, Platform } from "react-native";
+import { getMockConfig } from "./mock-config.js";
 
 // Augment the minimal react-native stub to include Platform.
 declare module "react-native" {
@@ -78,10 +79,25 @@ export class BleManager extends MockManager {
   private _mount(): Promise<void> {
     if (this._mountPromise) return this._mountPromise;
     const p = (async () => {
+      // Jest path: config injected by BleTestClient.mount() via shared globalThis.
+      // Skip the Metro fetch and the /mount call entirely — the test client has
+      // already mounted the namespace with the correct settings (e.g. disableAutoTick).
+      const injected = getMockConfig();
+      if (injected) {
+        this._devicesUrl = injected.devicesUrl;
+        this._bridgeUrl = injected.bridgeUrl;
+        return;
+      }
+
+      // Metro path: fetch config from the Metro middleware, then mount.
       const metroOrigin = await this._metroOrigin();
       console.log("[ble-faker] connecting to metro at", metroOrigin);
       const cfgRes = await fetch(`${metroOrigin}/ble-faker-config`);
-      if (!cfgRes.ok) throw new Error("ble-faker: missing metro config route");
+      if (!cfgRes.ok)
+        throw new Error(
+          `[ble-faker] Metro did not serve /ble-faker-config from ${metroOrigin}. ` +
+            `Did you start with BLE_MOCK=true and add withBleFaker() to metro.config.js?`,
+        );
       const { port, dir, label } = (await cfgRes.json()) as {
         port: number;
         dir: string;
