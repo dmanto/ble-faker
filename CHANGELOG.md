@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.5] - 2026-03-22
+
+### Fixed
+
+- Removed duplicate `react-native-ble-plx-mock` entry from `devDependencies` — it was already declared in `dependencies` (since 1.3.3) and the leftover devDep was redundant.
+
 ## [1.3.4] - 2026-03-22
 
 ### Fixed

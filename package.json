@@ -1,7 +1,7 @@
 {
   "name": "ble-faker",
   "type": "module",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "Scriptable BLE simulation toolchain for React Native development",
   "keywords": [
     "ble",
@@ -95,7 +95,6 @@
     "oxlint": "latest",
     "prettier": "latest",
     "react-native-ble-plx": "latest",
-    "react-native-ble-plx-mock": "^1.3.2",
     "typescript": "latest",
     "vite": "latest"
   }
