@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.1] - 2026-03-22
+
+### Fixed
+
+- `ble-faker/metro`: rollup's CJS conversion of `import.meta.url` produces `({}).url` (undefined), causing `fileURLToPath` to throw at load time. Replaced with `__dirname`, which is always available in CJS context and avoids the issue entirely.
+
 ## [1.3.0] - 2026-03-22
 
 ### Added

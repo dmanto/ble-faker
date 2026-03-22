@@ -23,14 +23,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { fileURLToPath } from "node:url";
+
+// __dirname is available because this file is always compiled to CJS by rollup.
+// Rollup's conversion of import.meta.url to ({}).url in CJS output produces undefined,
+// so we use __dirname directly instead.
+declare const __dirname: string;
 
 // Resolve the ble-faker package root. This file is built to dist/metro.cjs,
-// so one level up is the package root.
-const _bleFakerRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
+// so __dirname is dist/ and one level up is the package root.
+const _bleFakerRoot = path.resolve(__dirname, "..");
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyObject = Record<string, any>;
