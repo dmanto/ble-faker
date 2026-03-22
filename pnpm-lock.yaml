@@ -9,20 +9,23 @@ importers:
   .:
     dependencies:
       '@mojojs/core':
-        specifier: latest
+        specifier: ^1.26.12
         version: 1.26.12
       chokidar:
-        specifier: latest
+        specifier: ^5.0.0
         version: 5.0.0
       expo-constants:
         specifier: '>=13'
         version: 55.0.7(expo@55.0.4)(react-native@0.84.0(@babel/core@7.29.0)(react@19.2.4))(typescript@5.9.3)
       jsonpath-plus:
-        specifier: latest
+        specifier: ^10.4.0
         version: 10.4.0
       lodash:
-        specifier: latest
+        specifier: ^4.17.21
         version: 4.17.23
+      react-native-ble-plx-mock:
+        specifier: ^1.3.2
+        version: 1.3.2(react-native-ble-plx@3.5.1(react-native@0.84.0(@babel/core@7.29.0)(react@19.2.4))(react@19.2.4))(react@19.2.4)
     devDependencies:
       '@types/jsonpath-plus':
         specifier: latest
@@ -45,9 +48,6 @@ importers:
       react-native-ble-plx:
         specifier: latest
         version: 3.5.1(react-native@0.84.0(@babel/core@7.29.0)(react@19.2.4))(react@19.2.4)
-      react-native-ble-plx-mock:
-        specifier: ^1.3.2
-        version: 1.3.2(react-native-ble-plx@3.5.1(react-native@0.84.0(@babel/core@7.29.0)(react@19.2.4))(react@19.2.4))(react@19.2.4)
       typescript:
         specifier: latest
         version: 5.9.3

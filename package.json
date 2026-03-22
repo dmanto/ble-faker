@@ -1,7 +1,7 @@
 {
   "name": "ble-faker",
   "type": "module",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Scriptable BLE simulation toolchain for React Native development",
   "keywords": [
     "ble",
@@ -73,15 +73,23 @@
     "build:test": "pnpm build && pnpm test",
     "check": "concurrently \"pnpm lint\" \"pnpm test\" \"tsc\""
   },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
-    "@mojojs/core": "latest",
-    "chokidar": "latest",
-    "jsonpath-plus": "latest",
-    "lodash": "latest"
+    "@mojojs/core": "^1.26.12",
+    "chokidar": "^5.0.0",
+    "jsonpath-plus": "^10.4.0",
+    "lodash": "^4.17.21",
+    "react-native-ble-plx-mock": "^1.3.2"
   },
   "peerDependencies": {
-    "expo-constants": ">=13",
-    "react-native-ble-plx-mock": ">=1"
+    "expo-constants": ">=13"
+  },
+  "peerDependenciesMeta": {
+    "expo-constants": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/jsonpath-plus": "latest",

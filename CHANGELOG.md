@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.3] - 2026-03-22
+
+### Fixed
+
+- **`react-native-ble-plx-mock` moved from `peerDependencies` to `dependencies`** — it is an internal implementation detail of the mock layer and should not require a manual install step from consumers.
+- **`expo-constants` marked `optional: true` in `peerDependenciesMeta`** — bare React Native projects no longer see a peer dependency warning on install.
+- **Pinned all `dependencies` to proper semver ranges** (`^1.26.12`, `^5.0.0`, etc.) instead of `"latest"`, ensuring reproducible installs across environments.
+- **Added `engines: { node: ">=18" }`** to `package.json` so unsupported Node versions surface a clear error rather than cryptic failures.
+
+### Changed
+
+- **README: TypeScript device file example replaced with JSDoc approach** — device logic runs in a plain JavaScript sandbox (`node:vm`); TypeScript syntax causes a `SyntaxError` at runtime. The correct approach is JSDoc `@type` and `/// <reference types="ble-faker/device" />`, which gives full IDE autocompletion and event narrowing with no transpilation required.
+- **README: documented `{ disconnect: true }` limitation** — the mock signals disconnection via a characteristic error on the first monitored characteristic. Apps that only monitor later characteristics in the GATT profile may not detect the simulated disconnect.
+- **README: documented `BLE_FAKER_STATE` environment variable** in the CI section — overrides the default `~/.ble-faker-server.json` state file path, useful in CI environments where the home directory is not writable or shared across steps.
+
 ## [1.3.2] - 2026-03-22
 
 ### Fixed

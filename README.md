@@ -97,12 +97,13 @@ export default function (state, event) {
 
 > **No code at all?** Just `touch FF-00-11-22-33-02.js`. ble-faker auto-generates browser controls from the GATT profile — output fields for readable/notifiable characteristics, input fields for writable ones. Good enough to verify your profile is wired up correctly before you write any logic.
 
-Device logic files can also be TypeScript. Import `ble-faker/device` for full type coverage (types only, no runtime cost):
+**Type checking in JavaScript device files** — device logic runs in a plain JS sandbox (no TypeScript transpilation). Use JSDoc annotations for full IDE autocompletion and event narrowing with zero runtime cost:
 
-```ts
-import type { DeviceEvent, DeviceState } from "ble-faker/device";
+```js
+/// <reference types="ble-faker/device" />
 
-export default function (state: DeviceState, event: DeviceEvent) {
+/** @type {import('ble-faker/device').DeviceLogicFn} */
+export default function (state, event) {
   if (event.kind === "tick") {
     const hr = Number(state.vars.hr);
     return [["2A37", utils.packUint16(hr)]];
@@ -110,6 +111,8 @@ export default function (state: DeviceState, event: DeviceEvent) {
   return [];
 }
 ```
+
+The `/// <reference>` directive activates `utils` global completions; the `@type` annotation narrows `event` to each specific event kind in `if` branches. No `tsconfig` changes needed.
 
 ### 3. Configure Metro
 
@@ -205,9 +208,11 @@ Restart Metro (not just reload) whenever you change `metro.config.js`.
 | `{ in: [{ name, label }] }`    | Define browser input controls                           |
 | `{ out: [{ name, label }] }`   | Define browser output display fields                    |
 | `{ set: { field: 'value' } }`  | Push a string to a named browser output field           |
-| `{ disconnect: true }`         | Simulate a device disconnection                         |
+| `{ disconnect: true }`         | Simulate a device disconnection (see note below)        |
 | `{ readError: { uuid } }`      | Make the app's next characteristic read for `uuid` fail |
 | `{ clearReadError: { uuid } }` | Clear a previously set read error                       |
+
+> **`{ disconnect: true }` note:** The mock signals disconnection to the app by injecting a characteristic error on the first monitored characteristic. Apps that only monitor characteristics other than the first one in the GATT profile may not detect the simulated disconnect. If your disconnect handler isn't firing, ensure the app has an active monitor on the first characteristic defined in `gatt-profile.json`.
 
 ### State
 
@@ -453,6 +458,20 @@ try {
 ```
 
 For RNTL tests with `globalSetup`/`globalTeardown`, the server lifecycle is managed automatically by Jest — no manual CI step needed.
+
+The server writes its URL and port to `~/.ble-faker-server.json` on startup. `BleTestClient.connect()` reads from this file. In CI environments where the home directory is not writable or shared across steps, override the path with the `BLE_FAKER_STATE` environment variable:
+
+```yaml
+- name: Start ble-faker
+  run: npx ble-faker --port 58083 &
+  env:
+    BLE_FAKER_STATE: /tmp/ble-faker-server.json
+
+- name: Run tests
+  run: npm test
+  env:
+    BLE_FAKER_STATE: /tmp/ble-faker-server.json
+```
 
 ---
 
