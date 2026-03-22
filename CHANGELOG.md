@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.2] - 2026-03-22
+
+### Fixed
+
+- `ble-faker/metro`: `withBleFaker()` resolver was re-rooting relative imports (e.g. `./mock-config.js`) from inside ble-faker's `dist/` to the project root, causing Metro to fail to resolve `./mock-config.js` at bundle time. Added `!moduleName.startsWith(".")` guard so only bare-specifier imports are re-rooted. Added regression test.
+
 ## [1.3.1] - 2026-03-22
 
 ### Fixed
