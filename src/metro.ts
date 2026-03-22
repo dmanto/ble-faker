@@ -149,9 +149,15 @@ export function withBleFaker(
           type: "sourceFile",
         };
       }
-      // When resolving ble-faker's own internal imports, re-root the origin
-      // to the project root so Metro finds packages in the app's node_modules.
-      if (context.originModulePath.startsWith(_bleFakerRoot)) {
+      // When resolving ble-faker's own bare-specifier imports (e.g. react-native,
+      // expo-constants), re-root the origin to the project root so Metro finds
+      // them in the app's node_modules rather than ble-faker's.
+      // Relative imports (./mock-config.js, ../foo) must NOT be re-rooted —
+      // they resolve correctly from their actual location inside dist/.
+      if (
+        !moduleName.startsWith(".") &&
+        context.originModulePath.startsWith(_bleFakerRoot)
+      ) {
         return (originalResolve ?? context.resolveRequest)(
           { ...context, originModulePath: path.join(process.cwd(), "metro.config.js") },
           moduleName,

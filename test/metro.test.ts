@@ -1,7 +1,14 @@
 import test, { suite } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
+
+// Package root: test/../  (this file lives in test/)
+const _packageRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 
 // metro.cjs is CommonJS — use createRequire to load it from this ESM test file.
 const cjsRequire = createRequire(import.meta.url);
@@ -92,6 +99,41 @@ suite("withBleFaker metro helper", () => {
         `filePath should end with dist/mock.js, got: ${resolution.filePath}`,
       );
       assert.equal(resolution.type, "sourceFile");
+    } finally {
+      delete process.env.BLE_MOCK;
+    }
+  });
+
+  test("resolveRequest does NOT re-root relative imports from ble-faker (regression: ./mock-config.js)", () => {
+    process.env.BLE_MOCK = "true";
+    try {
+      const config = { resolver: {}, server: {} };
+      const result = withBleFaker(config, { dir: "/tmp/mocks" });
+
+      const resolve = (result.resolver as Record<string, unknown>)
+        .resolveRequest as (ctx: object, name: string, platform: string) => unknown;
+
+      // Simulate mock.js importing ./mock-config.js.
+      // originModulePath is inside ble-faker's dist/ (starts with _bleFakerRoot).
+      // Metro must resolve the relative path from its actual location, not re-root it.
+      let receivedContext: { originModulePath: string } | null = null;
+      const fakeContext = {
+        originModulePath: path.join(_packageRoot, "dist", "mock.js"),
+        resolveRequest: (ctx: { originModulePath: string }, _name: string) => {
+          receivedContext = ctx;
+          return { filePath: "/resolved", type: "sourceFile" };
+        },
+      };
+
+      resolve(fakeContext, "./mock-config.js", "android");
+
+      // The context passed to resolveRequest must NOT have its originModulePath
+      // overridden — the relative import must resolve from its real location.
+      assert.ok(receivedContext !== null, "resolveRequest should have been called");
+      assert.ok(
+        receivedContext!.originModulePath.includes("dist"),
+        `originModulePath should still point inside dist/, got: ${receivedContext!.originModulePath}`,
+      );
     } finally {
       delete process.env.BLE_MOCK;
     }
